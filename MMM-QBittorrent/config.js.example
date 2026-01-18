@@ -1,0 +1,57 @@
+{
+  module: "MMM-QBittorrent",
+  position: "bottom_left",
+  config: {
+    // ========================================
+    // CONNECTION SETTINGS
+    // ========================================
+    connection: {
+      host: "http://localhost:8080",  // Required: qBittorrent API URL (http:// or https://)
+      username: "",                    // Optional: qBittorrent username
+      password: "",                    // Optional: qBittorrent password
+
+      // TLS/SSL Configuration (for HTTPS connections)
+      tls: {
+        rejectUnauthorized: true,      // Validate server certificates (false accepts self-signed)
+        ca: null,                      // Custom CA certificate path(s): "/path/to/ca.pem" or ["/path/to/ca1.pem", "/path/to/ca2.pem"]
+        cert: null,                    // Client certificate path for mutual TLS: "/path/to/client-cert.pem"
+        key: null,                     // Client private key path for mutual TLS: "/path/to/client-key.pem"
+        passphrase: null,              // Passphrase for encrypted private key
+        minVersion: "TLSv1.2",         // Minimum TLS version: "TLSv1", "TLSv1.1", "TLSv1.2", "TLSv1.3"
+        maxVersion: null               // Maximum TLS version: null (no limit) or specific version
+      }
+    },
+
+    // ========================================
+    // POLLING SETTINGS
+    // ========================================
+    polling: {
+      updateInterval: 5000,            // Poll interval in milliseconds (minimum: 1000)
+      pollTimeout: 2000,               // Request timeout in milliseconds (minimum: 500)
+      maxConsecutiveFailures: 3,       // Max failures before showing error
+      pauseOnRepeatedFailures: false   // Pause polling on repeated failures
+    },
+
+    // ========================================
+    // DISPLAY SETTINGS
+    // ========================================
+    display: {
+      maxItems: 5,                     // Maximum torrents to display
+      viewFilter: "all",               // Filter: "all", "downloading", "completed", "paused"
+      compact: false,                  // Enable compact mode (reduced spacing)
+      scale: 0.6,                      // Scale factor (0.01 to 10)
+      columns: [                       // Columns to display (in order)
+        'name',                        // Available: name, size, progress, status, seeds, peers,
+        'progress',                    // dlspeed, upspeed, eta, ratio, added_on, actions
+        'status',
+        'dlspeed',
+        'eta',
+        'actions'
+      ],
+      sortBy: 'added_on',              // Sort column: any column name from above
+      sortOrder: 'desc',               // Sort direction: "asc" or "desc"
+      showProgressBar: true,           // Show visual progress bar (false = text percentage only)
+      headerAlign: null                // Header alignment: null (auto), "left", "center", "right"
+    }
+  }
+}

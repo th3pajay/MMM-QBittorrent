@@ -1,0 +1,317 @@
+/* CSS Variables */
+:root {
+  /* Text Hierarchy */
+  --text-primary: rgba(255, 255, 255, 0.95);
+  --text-secondary: rgba(255, 255, 255, 0.7);
+  --text-muted: rgba(255, 255, 255, 0.5);
+  --text-faint: rgba(255, 255, 255, 0.3);
+
+  /* Border Hierarchy */
+  --border-strong: rgba(255, 255, 255, 0.2);
+  --border-default: rgba(255, 255, 255, 0.1);
+  --border-subtle: rgba(255, 255, 255, 0.05);
+
+  /* Easing */
+  --ease-out: cubic-bezier(0.25, 1, 0.5, 1);
+}
+
+/* Module Container */
+.mmm-qb {
+  font-family: "Roboto Condensed", sans-serif;
+  line-height: 1.5;
+}
+
+/* Header */
+.qb-header-container {
+  margin-bottom: 12px;
+}
+
+.qb-module-header {
+  font-size: 18px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  margin-bottom: 8px;
+  color: var(--text-primary);
+}
+
+.qb-header-separator {
+  border: none;
+  border-top: 1px solid rgba(255, 255, 255, 0.15);
+  margin: 8px 0;
+}
+
+/* Status Messages */
+.qb-status-message {
+  text-align: center;
+  padding: 12px;
+  color: var(--text-secondary);
+}
+
+.qb-status-details {
+  text-align: center;
+  padding: 8px;
+  color: var(--text-muted);
+}
+
+/* Table */
+.qb-table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: auto;
+  margin-top: 8px;
+}
+
+.qb-thead {
+  border-bottom: 1px solid var(--border-strong);
+}
+
+.qb-th {
+  padding: 8px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  white-space: nowrap;
+}
+
+.qb-row {
+  border-bottom: 1px solid var(--border-default);
+  transition: background-color 0.15s var(--ease-out);
+}
+
+.qb-row:nth-child(even) {
+  background-color: rgba(255, 255, 255, 0.02);
+}
+
+.qb-row:hover {
+  background-color: rgba(255, 255, 255, 0.08);
+}
+
+.qb-row:last-child {
+  border-bottom: none;
+}
+
+.qb-td {
+  padding: 12px;
+  font-size: 14px;
+  color: var(--text-primary);
+  vertical-align: middle;
+}
+
+/* Columns */
+.col-name {
+  max-width: 300px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.col-size,
+.col-dlspeed,
+.col-upspeed,
+.col-ratio {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* Progress Column */
+.col-progress {
+  min-width: 120px;
+}
+
+.qb-progress-cell {
+  position: relative;
+  width: 100%;
+}
+
+.qb-progress-bar-container {
+  width: 100%;
+  height: 16px;
+  background-color: var(--border-default);
+  border-radius: 8px;
+  border: 0.5px solid rgba(255, 255, 255, 0.15);
+  overflow: hidden;
+  position: relative;
+}
+
+/* Progress Bar */
+.qb-progress-bar {
+  height: 100%;
+  background: linear-gradient(90deg, #4CAF50 0%, #5CB85C 100%);
+  border-radius: 8px;
+  transition: width 0.25s var(--ease-out), background 0.25s var(--ease-out);
+}
+
+.qb-progress-bar.downloading {
+  background: linear-gradient(90deg, #4CAF50 0%, #5CB85C 100%);
+}
+
+.qb-progress-bar.seeding,
+.qb-progress-bar.uploading {
+  background: linear-gradient(90deg, #2196F3 0%, #42A5F5 100%);
+}
+
+.qb-progress-bar.stalled,
+.qb-progress-bar.paused {
+  background: linear-gradient(90deg, #757575 0%, #9E9E9E 100%);
+}
+
+.qb-progress-bar.pulse {
+  animation: pulse 1s ease-out;
+}
+
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.7;
+    transform: scale(0.98);
+  }
+}
+
+/* Progress Text */
+.qb-progress-text {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-primary);
+  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.9);
+  pointer-events: none;
+  z-index: 1;
+}
+
+.qb-progress-text-only {
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+
+/* Status Badge */
+.qb-status-badge {
+  display: inline-block;
+  padding: 4px 8px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+/* Status Colors - Green for downloading */
+.status-downloading,
+.status-forcedDL,
+.status-metaDL {
+  background-color: rgba(76, 175, 80, 0.3);
+  color: #81C784;
+  border: 1px solid #4CAF50;
+}
+
+/* Status Colors - Blue for uploading/seeding */
+.status-uploading,
+.status-forcedUP,
+.status-stalledUP,
+.status-queuedUP,
+.status-pausedUP {
+  background-color: rgba(33, 150, 243, 0.3);
+  color: #64B5F6;
+  border: 1px solid #2196F3;
+}
+
+/* Status Colors - Red for errors */
+.status-error,
+.status-missingFiles {
+  background-color: rgba(244, 67, 54, 0.3);
+  color: #E57373;
+  border: 1px solid #F44336;
+}
+
+/* Status Colors - Orange for paused downloads */
+.status-pausedDL {
+  background-color: rgba(255, 152, 0, 0.3);
+  color: #FFB74D;
+  border: 1px solid #FF9800;
+}
+
+/* Status Colors - Gray for stalled/queued/checking */
+.status-stalledDL,
+.status-queuedDL,
+.status-checkingDL,
+.status-checkingUP,
+.status-allocating {
+  background-color: rgba(158, 158, 158, 0.3);
+  color: #BDBDBD;
+  border: 1px solid #9E9E9E;
+}
+
+/* Actions */
+.qb-actions-cell {
+  display: flex;
+  gap: 8px;
+  justify-content: center;
+  align-items: center;
+}
+
+.qb-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  background-color: var(--border-default);
+  border: 1px solid var(--border-strong);
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.15s var(--ease-out);
+  font-size: 14px;
+  user-select: none;
+}
+
+.qb-action:hover {
+  background-color: var(--border-strong);
+  border-color: rgba(255, 255, 255, 0.4);
+  transform: scale(1.05);
+}
+
+.qb-action:active {
+  transform: scale(0.95);
+  transition-duration: 0.05s;
+}
+
+/* Compact Mode */
+.mmm-qb.compact .qb-th {
+  padding: 8px;
+  font-size: 11px;
+}
+
+.mmm-qb.compact .qb-td {
+  padding: 8px;
+  font-size: 13px;
+}
+
+.mmm-qb.compact .qb-progress-bar-container {
+  height: 12px;
+  border-radius: 6px;
+}
+
+.mmm-qb.compact .qb-progress-text {
+  font-size: 11px;
+}
+
+.mmm-qb.compact .qb-status-badge {
+  padding: 4px 8px;
+  font-size: 11px;
+}
+
+.mmm-qb.compact .qb-action {
+  width: 24px;
+  height: 24px;
+  font-size: 12px;
+}
