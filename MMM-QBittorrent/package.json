@@ -1,6 +1,6 @@
 {
   "name": "MMM-QBittorrent",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "QBittorrent status module for MagicMirror",
   "main": "MMM-QBittorrent.js",
   "author": "th3pajay",

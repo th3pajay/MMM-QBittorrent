@@ -1,11 +1,11 @@
 MMM-QBittorrent
 
-Modern MagicMirror module for monitoring and controlling qBittorrent.
+MagicMirror module for monitoring and controlling qBittorrent.
 
 ![MagicMirror](https://img.shields.io/badge/MagicMirror-v2.33.0-blue)
 ![Torrent](https://img.shields.io/badge/QBittorrent-green)
 ![Module](https://img.shields.io/badge/Module-Display-orange)
-![Version](https://img.shields.io/badge/Version-1.0.3-yellow)
+![Version](https://img.shields.io/badge/Version-1.1.0-yellow)
 ![License](https://img.shields.io/badge/License-MIT-lightgrey)
 
 <p align="center">

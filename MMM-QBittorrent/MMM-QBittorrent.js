@@ -1,3 +1,8 @@
+/**
+ * @typedef {{hash: string, name: string, progress: number, state: string, size: number, dlspeed: number, upspeed: number, eta: number, ratio: number, num_seeds: number, num_leechs: number, added_on: number, completed?: number}} TorrentData
+ * @typedef {{compact: boolean, scale: number, maxItems: number, viewFilter: string, columns: string[], sortBy: string, sortOrder: string, showProgressBar: boolean, headerAlign: string|null}} NormalizedConfig
+ */
+
 Module.register("MMM-QBittorrent", {
   CONSTANTS: {
     PULSE_DURATION_MS: 1000,
@@ -165,14 +170,13 @@ Module.register("MMM-QBittorrent", {
     this.errorDetails = null;
 
     this.authTimestamp = null;
-    this.cookieLifetime = 3600000;
 
     this.moduleId = this.identifier;
     this.cachedDisplayTorrents = null;
     this.cachedConfigHash = null;
     this.normalizedConfig = this.normalizeConfig();
 
-    this.clickHandler = (e) => {
+    this.boundClickHandler = (e) => {
       const btn = e.target.closest('.qb-action');
       if (!btn) return;
       const wrapper = btn.closest('.mmm-qb');
@@ -182,7 +186,7 @@ Module.register("MMM-QBittorrent", {
       this.sendSocketNotification("QB_ACTION", { hash, action });
     };
 
-    document.addEventListener('click', this.clickHandler);
+    document.addEventListener('click', this.boundClickHandler);
 
     console.log("[MMM-QBittorrent] Sending QB_INIT to node_helper with config:", {
       host: this.config.host,
@@ -195,18 +199,31 @@ Module.register("MMM-QBittorrent", {
     return ["styles.css"];
   },
 
+  stop() {
+    console.log("[MMM-QBittorrent] Stopping module...");
+    if (this.boundClickHandler) {
+      document.removeEventListener('click', this.boundClickHandler);
+      this.boundClickHandler = null;
+    }
+  },
+
   suspend() {
     console.log("[MMM-QBittorrent] Suspending polling");
-    document.removeEventListener('click', this.clickHandler);
+    if (this.boundClickHandler) {
+      document.removeEventListener('click', this.boundClickHandler);
+    }
     this.sendSocketNotification("QB_SUSPEND", {});
   },
 
   resume() {
     console.log("[MMM-QBittorrent] Resuming polling");
-    document.addEventListener('click', this.clickHandler);
+    if (this.boundClickHandler) {
+      document.addEventListener('click', this.boundClickHandler);
+    }
     this.sendSocketNotification("QB_RESUME", {});
   },
 
+  /** @param {TorrentData|null} oldTorrent @param {TorrentData} newTorrent @returns {boolean} */
   hasRelevantChanges(oldTorrent, newTorrent) {
     if (!oldTorrent) return true;
     if (oldTorrent === newTorrent) return false;
@@ -224,6 +241,7 @@ Module.register("MMM-QBittorrent", {
     return false;
   },
 
+  /** @param {string} notification @param {any} payload */
   socketNotificationReceived(notification, payload) {
     if (notification === "QB_UPDATE") {
       console.log(`[MMM-QBittorrent] Received QB_UPDATE with ${payload?.length || 0} torrents`);
@@ -279,6 +297,7 @@ Module.register("MMM-QBittorrent", {
     }
   },
 
+  /** @returns {HTMLElement} */
   getDom() {
     const wrapper = document.createElement("div");
 
@@ -362,6 +381,7 @@ Module.register("MMM-QBittorrent", {
     return wrapper;
   },
 
+  /** @param {NormalizedConfig} config @returns {TorrentData[]} */
   getDisplayTorrents(config) {
     const configHash = `${config.sortBy}-${config.sortOrder}-${config.maxItems}-${config.viewFilter}`;
     if (this.cachedDisplayTorrents && this.cachedConfigHash === configHash) {
@@ -400,6 +420,7 @@ Module.register("MMM-QBittorrent", {
     }
   },
 
+  /** @param {HTMLElement} row @param {TorrentData} torrent @param {NormalizedConfig} config */
   updateRowContent(row, torrent, config) {
     row.className = `qb-row state-${torrent.state}`;
 
@@ -439,6 +460,7 @@ Module.register("MMM-QBittorrent", {
     }
   },
 
+  /** @param {TorrentData} t @returns {boolean} */
   applyFilter(t) {
     const viewFilter = this.config.display?.viewFilter ?? this.config.viewFilter ?? "all";
     switch (viewFilter) {
@@ -449,6 +471,7 @@ Module.register("MMM-QBittorrent", {
     }
   },
 
+  /** @returns {NormalizedConfig} */
   normalizeConfig() {
     const config = {
       compact: this.config.display?.compact ?? this.config.compact ?? false,
@@ -483,6 +506,7 @@ Module.register("MMM-QBittorrent", {
     return config;
   },
 
+  /** @param {number} seconds @returns {string} */
   formatETA(seconds) {
     if (seconds <= 0 || seconds === this.CONSTANTS.INFINITE_ETA) return "∞";
     if (seconds < 60) return `${seconds}s`;
@@ -494,6 +518,7 @@ Module.register("MMM-QBittorrent", {
     return mins > 0 ? `${hours}h ${mins}m` : `${hours}h`;
   },
 
+  /** @param {number} bytesPerSec @returns {string} */
   formatSpeed(bytesPerSec) {
     if (!bytesPerSec) return "";
     if (bytesPerSec < this.CONSTANTS.MIN_SPEED_FOR_MB) {
@@ -502,6 +527,7 @@ Module.register("MMM-QBittorrent", {
     return `${(bytesPerSec / 1024 / 1024).toFixed(1)} MB/s`;
   },
 
+  /** @param {string} label @param {string} action @param {string} hash @returns {HTMLElement} */
   actionButton(label, action, hash) {
     const btn = document.createElement("div");
     btn.className = "qb-action";
@@ -511,6 +537,7 @@ Module.register("MMM-QBittorrent", {
     return btn;
   },
 
+  /** @param {NormalizedConfig} config @returns {HTMLElement} */
   renderModuleHeader(config) {
     const headerContainer = document.createElement("div");
     headerContainer.className = "qb-header-container";
@@ -539,6 +566,7 @@ Module.register("MMM-QBittorrent", {
     return headerContainer;
   },
 
+  /** @param {TorrentData[]} torrents @param {NormalizedConfig} config @returns {HTMLElement} */
   renderTable(torrents, config) {
     const table = document.createElement("table");
     table.className = "qb-table";
@@ -558,6 +586,7 @@ Module.register("MMM-QBittorrent", {
     return table;
   },
 
+  /** @param {string[]} columns @returns {HTMLElement} */
   renderTableHeader(columns) {
     const thead = document.createElement("thead");
     thead.className = "qb-thead";
@@ -581,6 +610,7 @@ Module.register("MMM-QBittorrent", {
     return thead;
   },
 
+  /** @param {TorrentData} torrent @param {NormalizedConfig} config @returns {HTMLElement} */
   renderTableRow(torrent, config) {
     const row = document.createElement("tr");
     row.className = `qb-row state-${torrent.state}`;
@@ -620,6 +650,7 @@ Module.register("MMM-QBittorrent", {
     return row;
   },
 
+  /** @param {HTMLElement} td @param {TorrentData} torrent @param {boolean} showBar */
   renderProgressCell(td, torrent, showBar) {
     const progressData = this.COLUMN_DEFINITIONS.progress.formatter.call(this, torrent.progress, torrent);
 
@@ -663,6 +694,7 @@ Module.register("MMM-QBittorrent", {
     td.appendChild(container);
   },
 
+  /** @param {string} state @param {number} progress @returns {string} */
   getProgressBarStateClass(state, progress) {
     const downloadingStates = ['downloading', 'forcedDL', 'metaDL'];
     const uploadingStates = ['uploading', 'forcedUP', 'stalledUP', 'queuedUP', 'pausedUP'];
@@ -680,6 +712,7 @@ Module.register("MMM-QBittorrent", {
     return 'downloading';
   },
 
+  /** @param {HTMLElement} td @param {TorrentData} torrent */
   renderStatusCell(td, torrent) {
     const statusData = this.COLUMN_DEFINITIONS.status.formatter.call(this, torrent.state, torrent);
 
@@ -690,6 +723,7 @@ Module.register("MMM-QBittorrent", {
     td.appendChild(badge);
   },
 
+  /** @param {HTMLElement} td @param {TorrentData} torrent */
   renderActionsCell(td, torrent) {
     const actionsContainer = document.createElement("div");
     actionsContainer.className = "qb-actions-cell";
@@ -700,6 +734,7 @@ Module.register("MMM-QBittorrent", {
     td.appendChild(actionsContainer);
   },
 
+  /** @param {TorrentData[]} torrents @param {string} sortBy @param {string} sortOrder @returns {TorrentData[]} */
   sortTorrents(torrents, sortBy, sortOrder) {
     const colDef = this.COLUMN_DEFINITIONS[sortBy];
 
@@ -716,6 +751,7 @@ Module.register("MMM-QBittorrent", {
     return sorted;
   },
 
+  /** @param {number} bytes @returns {string} */
   formatSize(bytes) {
     if (!bytes || bytes === 0) return "0 B";
 
@@ -729,6 +765,7 @@ Module.register("MMM-QBittorrent", {
     return `${value.toFixed(decimals)} ${units[unitIndex]}`;
   },
 
+  /** @param {number} timestamp @returns {string} */
   formatDate(timestamp) {
     if (!timestamp) return "Unknown";
 
@@ -746,6 +783,7 @@ Module.register("MMM-QBittorrent", {
     return date.toLocaleDateString('en-US', options);
   },
 
+  /** @param {string} state @returns {string} */
   formatStateName(state) {
     const stateNames = {
       downloading: "Downloading",

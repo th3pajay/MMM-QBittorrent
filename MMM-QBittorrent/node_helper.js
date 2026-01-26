@@ -5,16 +5,31 @@ const url = require("url")
 const fs = require("fs")
 const path = require("path")
 
+const CONSTANTS = require("./lib/constants")
+const { QBConnectionError, QBAuthenticationError, QBTimeoutError } = require("./lib/errors")
+
+/**
+ * @typedef {{connection: {host: string, username: string, password: string, tls: TLSConfig}, polling: {updateInterval: number, pollTimeout: number, maxConsecutiveFailures: number, pauseOnRepeatedFailures: boolean}, display: {maxItems: number, viewFilter: string, compact: boolean, scale: number}}} NormalizedHelperConfig
+ * @typedef {{rejectUnauthorized?: boolean, ca?: string|string[], cert?: string, key?: string, passphrase?: string, minVersion?: string, maxVersion?: string}} TLSConfig
+ * @typedef {{ok: boolean, status: number, headers: {get: Function, raw: Object}, json: Function, text: Function}} HttpResponse
+ */
+
 module.exports = NodeHelper.create({
-  AUTH_RETRY_DELAY_MS: 100,
+  STATES: {
+    IDLE: 'idle',
+    AUTHENTICATING: 'authenticating',
+    POLLING: 'polling',
+    PAUSED: 'paused',
+    ERROR: 'error',
+    STOPPED: 'stopped'
+  },
 
   start() {
     this.authCookie = null
     this.config = null
     this.pollingTimer = null
     this.consecutiveFailures = 0
-    this.isPaused = false
-    this.authenticating = false
+    this.state = this.STATES.IDLE
     this.cachedTlsOptions = null
     this.currentPollInterval = null
     this.log("Helper started")
@@ -26,12 +41,35 @@ module.exports = NodeHelper.create({
       clearInterval(this.pollingTimer)
       this.pollingTimer = null
     }
+    this.setState(this.STATES.STOPPED)
   },
 
+  /** @param {string} newState @returns {boolean} */
+  setState(newState) {
+    const validTransitions = {
+      [this.STATES.IDLE]: [this.STATES.AUTHENTICATING, this.STATES.POLLING, this.STATES.STOPPED],
+      [this.STATES.AUTHENTICATING]: [this.STATES.POLLING, this.STATES.ERROR, this.STATES.STOPPED],
+      [this.STATES.POLLING]: [this.STATES.PAUSED, this.STATES.ERROR, this.STATES.STOPPED, this.STATES.AUTHENTICATING],
+      [this.STATES.PAUSED]: [this.STATES.POLLING, this.STATES.STOPPED],
+      [this.STATES.ERROR]: [this.STATES.AUTHENTICATING, this.STATES.POLLING, this.STATES.STOPPED],
+      [this.STATES.STOPPED]: []
+    };
+
+    if (!this.state || !validTransitions[this.state] || validTransitions[this.state].includes(newState)) {
+      this.state = newState;
+      return true;
+    }
+
+    this.log(`Invalid state transition: ${this.state} -> ${newState}`);
+    return false;
+  },
+
+  /** @param {string} msg */
   log(msg) {
     console.log(`[MMM-QBittorrent] [QB] ${msg}`)
   },
 
+  /** @param {Object} config @returns {NormalizedHelperConfig} */
   normalizeConfig(config) {
     return {
       connection: {
@@ -63,6 +101,7 @@ module.exports = NodeHelper.create({
     };
   },
 
+  /** @param {NormalizedHelperConfig} config @returns {boolean} */
   validateConfig(config) {
     const errors = [];
 
@@ -141,6 +180,7 @@ module.exports = NodeHelper.create({
     return true;
   },
 
+  /** @param {string} filePath @returns {string} */
   resolveCertPath(filePath) {
     if (path.isAbsolute(filePath)) {
       return filePath;
@@ -148,6 +188,7 @@ module.exports = NodeHelper.create({
     return path.resolve(__dirname, filePath);
   },
 
+  /** @returns {Object} */
   loadTlsOptions() {
     if (this.cachedTlsOptions) {
       return this.cachedTlsOptions;
@@ -186,6 +227,7 @@ module.exports = NodeHelper.create({
     return options;
   },
 
+  /** @param {{url: string, method?: string, headers?: Object, body?: string|null, timeout?: number}} options @returns {Promise<HttpResponse>} */
   makeHttpRequest({ url: requestUrl, method = "GET", headers = {}, body = null, timeout = 5000 }) {
     return new Promise((resolve, reject) => {
       const parsedUrl = new url.URL(requestUrl);
@@ -253,6 +295,7 @@ module.exports = NodeHelper.create({
     });
   },
 
+  /** @returns {Promise<boolean>} */
   async authenticate() {
     const host = this.config.connection.host
     const username = this.config.connection.username
@@ -309,13 +352,13 @@ module.exports = NodeHelper.create({
     }
 
     this.consecutiveFailures = 0
-    this.isPaused = false
+    this.setState(this.STATES.POLLING)
     this.currentPollInterval = this.config.polling?.updateInterval || 5000
 
     this.pollTorrents()
 
     this.pollingTimer = setInterval(() => {
-      if (!this.isPaused) {
+      if (this.state !== this.STATES.PAUSED && this.state !== this.STATES.STOPPED) {
         this.pollTorrents()
       }
     }, this.currentPollInterval)
@@ -323,18 +366,20 @@ module.exports = NodeHelper.create({
     this.log(`Polling started with interval: ${this.currentPollInterval}ms`)
   },
 
+  /** @param {number} newInterval */
   restartPollingWithInterval(newInterval) {
     if (this.pollingTimer) {
       clearInterval(this.pollingTimer)
     }
     this.currentPollInterval = newInterval
     this.pollingTimer = setInterval(() => {
-      if (!this.isPaused) {
+      if (this.state !== this.STATES.PAUSED && this.state !== this.STATES.STOPPED) {
         this.pollTorrents()
       }
     }, this.currentPollInterval)
   },
 
+  /** @returns {Promise<void>} */
   async pollTorrents() {
     this.log("Polling torrents...")
 
@@ -357,14 +402,17 @@ module.exports = NodeHelper.create({
       }
 
       const maxFailures = this.config.polling?.maxConsecutiveFailures || 3
-      if (this.consecutiveFailures >= maxFailures) {
-        if (this.config.polling?.pauseOnRepeatedFailures) {
-          this.isPaused = true
+      if (this.consecutiveFailures >= 1) {
+        if (this.consecutiveFailures >= maxFailures && this.config.polling?.pauseOnRepeatedFailures) {
+          this.setState(this.STATES.PAUSED)
           this.log("Pausing polling due to repeated failures")
+        } else {
+          this.setState(this.STATES.ERROR)
         }
         this.sendSocketNotification("QB_ERROR", {
           message: "Failed to connect to qBittorrent",
-          failures: this.consecutiveFailures
+          failures: this.consecutiveFailures,
+          willRetry: this.consecutiveFailures < maxFailures
         })
       }
     } else {
@@ -375,30 +423,33 @@ module.exports = NodeHelper.create({
         }
       }
       this.consecutiveFailures = 0
-      this.isPaused = false
+      this.setState(this.STATES.POLLING)
 
       this.sendSocketNotification("QB_UPDATE", data)
     }
   },
 
+  /** @returns {Promise<Array|null>} */
   async fetchTorrentData() {
     let waitCount = 0
     const maxWaitCount = 50
-    while (this.authenticating && waitCount < maxWaitCount) {
-      await new Promise(resolve => setTimeout(resolve, this.AUTH_RETRY_DELAY_MS))
+    while (this.state === this.STATES.AUTHENTICATING && waitCount < maxWaitCount) {
+      await new Promise(resolve => setTimeout(resolve, CONSTANTS.AUTH_RETRY_DELAY_MS))
       waitCount++
     }
 
-    if (this.authenticating) {
+    if (this.state === this.STATES.AUTHENTICATING) {
       this.log("Authentication timeout while waiting")
       return null
     }
 
     if (!this.authCookie) {
-      this.authenticating = true
+      this.setState(this.STATES.AUTHENTICATING)
       const ok = await this.authenticate()
-      this.authenticating = false
-      if (!ok) {
+      if (ok) {
+        this.setState(this.STATES.POLLING)
+      } else {
+        this.setState(this.STATES.ERROR)
         this.log("Authentication failed")
         return null
       }
@@ -441,6 +492,7 @@ module.exports = NodeHelper.create({
     }
   },
 
+  /** @param {{hash: string, action: string}} payload @returns {Promise<void>} */
   async handleAction(payload) {
     const { hash, action } = payload
     this.log(`Handling action: ${action} for torrent ${hash}`)
@@ -484,6 +536,7 @@ module.exports = NodeHelper.create({
     }
   },
 
+  /** @param {string} notification @param {any} payload */
   socketNotificationReceived(notification, payload) {
     if (notification === "QB_INIT") {
       this.log("Received QB_INIT with config")
@@ -505,11 +558,11 @@ module.exports = NodeHelper.create({
     }
     else if (notification === "QB_SUSPEND") {
       this.log("Suspending polling")
-      this.isPaused = true
+      this.setState(this.STATES.PAUSED)
     }
     else if (notification === "QB_RESUME") {
       this.log("Resuming polling")
-      this.isPaused = false
+      this.setState(this.STATES.POLLING)
       this.pollTorrents()
     }
   }
