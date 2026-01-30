@@ -14,6 +14,42 @@ Module.register("MMM-QBittorrent", {
     AUTH_RETRY_DELAY_MS: 100,
   },
 
+  STATE_CLASS_MAP: {
+    downloading: 'downloading', forcedDL: 'downloading', metaDL: 'downloading',
+    uploading: 'seeding', forcedUP: 'seeding', stalledUP: 'seeding',
+    queuedUP: 'seeding', pausedUP: 'seeding',
+    stalledDL: 'stalled', queuedDL: 'stalled', checkingDL: 'stalled',
+    checkingUP: 'stalled', allocating: 'stalled', pausedDL: 'stalled'
+  },
+
+  STATE_NAMES: {
+    downloading: "Downloading",
+    uploading: "Seeding",
+    pausedDL: "Paused",
+    pausedUP: "Paused",
+    stalledDL: "Stalled",
+    stalledUP: "Seeding",
+    queuedDL: "Queued",
+    queuedUP: "Queued",
+    checkingDL: "Checking",
+    checkingUP: "Checking",
+    forcedDL: "Downloading",
+    forcedUP: "Seeding",
+    metaDL: "Metadata",
+    allocating: "Allocating",
+    error: "Error",
+    missingFiles: "Missing Files"
+  },
+
+  STATUS_SORT_PRIORITY: {
+    downloading: 5, forcedDL: 5, metaDL: 5,
+    uploading: 4, forcedUP: 4, stalledUP: 4,
+    error: 3, missingFiles: 3,
+    pausedDL: 2, pausedUP: 2,
+    stalledDL: 1, queuedDL: 1, queuedUP: 1,
+    checkingDL: 1, checkingUP: 1, allocating: 1
+  },
+
   COLUMN_DEFINITIONS: {
     name: {
       label: 'Name',
@@ -49,16 +85,9 @@ Module.register("MMM-QBittorrent", {
       field: 'state',
       align: 'center',
       sortable: true,
-      sortFn: (a, b) => {
-        const priority = {
-          downloading: 5, forcedDL: 5, metaDL: 5,
-          uploading: 4, forcedUP: 4, stalledUP: 4,
-          error: 3, missingFiles: 3,
-          pausedDL: 2, pausedUP: 2,
-          stalledDL: 1, queuedDL: 1, queuedUP: 1, checkingDL: 1, checkingUP: 1, allocating: 1
-        };
-        return (priority[b.state] || 0) - (priority[a.state] || 0);
-      },
+      sortFn: function(a, b) {
+        return (this.STATUS_SORT_PRIORITY[b.state] || 0) - (this.STATUS_SORT_PRIORITY[a.state] || 0);
+      }.bind(this),
       formatter: function(value) {
         return { state: value, displayText: this.formatStateName(value) };
       },
@@ -490,6 +519,11 @@ Module.register("MMM-QBittorrent", {
       config.scale = 0.6;
     }
 
+    if (config.maxItems > 50) {
+      console.warn("[MMM-QBittorrent] maxItems capped at 50 for performance");
+      config.maxItems = 50;
+    }
+
     config.columns = config.columns.filter(col => this.COLUMN_DEFINITIONS[col]);
     if (config.columns.length === 0) {
       config.columns = ['name', 'progress', 'status', 'actions'];
@@ -510,9 +544,7 @@ Module.register("MMM-QBittorrent", {
   formatETA(seconds) {
     if (seconds <= 0 || seconds === this.CONSTANTS.INFINITE_ETA) return "∞";
     if (seconds < 60) return `${seconds}s`;
-    if (seconds < this.CONSTANTS.MIN_ETA_FOR_HOURS) {
-      return `${Math.round(seconds / 60)}m`;
-    }
+    if (seconds < this.CONSTANTS.MIN_ETA_FOR_HOURS) return `${Math.round(seconds / 60)}m`;
     const hours = Math.floor(seconds / 3600);
     const mins = Math.round((seconds % 3600) / 60);
     return mins > 0 ? `${hours}h ${mins}m` : `${hours}h`;
@@ -521,9 +553,7 @@ Module.register("MMM-QBittorrent", {
   /** @param {number} bytesPerSec @returns {string} */
   formatSpeed(bytesPerSec) {
     if (!bytesPerSec) return "";
-    if (bytesPerSec < this.CONSTANTS.MIN_SPEED_FOR_MB) {
-      return `${(bytesPerSec / 1024).toFixed(1)} KB/s`;
-    }
+    if (bytesPerSec < this.CONSTANTS.MIN_SPEED_FOR_MB) return `${(bytesPerSec / 1024).toFixed(1)} KB/s`;
     return `${(bytesPerSec / 1024 / 1024).toFixed(1)} MB/s`;
   },
 
@@ -696,20 +726,8 @@ Module.register("MMM-QBittorrent", {
 
   /** @param {string} state @param {number} progress @returns {string} */
   getProgressBarStateClass(state, progress) {
-    const downloadingStates = ['downloading', 'forcedDL', 'metaDL'];
-    const uploadingStates = ['uploading', 'forcedUP', 'stalledUP', 'queuedUP', 'pausedUP'];
-    const stalledStates = ['stalledDL', 'queuedDL', 'checkingDL', 'checkingUP', 'allocating'];
-    const pausedStates = ['pausedDL'];
-
-    if (downloadingStates.includes(state)) {
-      return 'downloading';
-    } else if (uploadingStates.includes(state) || progress === 1) {
-      return 'seeding';
-    } else if (stalledStates.includes(state) || pausedStates.includes(state)) {
-      return 'stalled';
-    }
-
-    return 'downloading';
+    if (progress === 1) return 'seeding';
+    return this.STATE_CLASS_MAP[state] || 'downloading';
   },
 
   /** @param {HTMLElement} td @param {TorrentData} torrent */
@@ -742,13 +760,11 @@ Module.register("MMM-QBittorrent", {
       return torrents.sort((a, b) => (b.added_on || 0) - (a.added_on || 0));
     }
 
-    const sorted = torrents.sort(colDef.sortFn);
-
     if (sortOrder === 'desc') {
-      return sorted.reverse();
+      return torrents.sort((a, b) => colDef.sortFn(b, a));
     }
 
-    return sorted;
+    return torrents.sort(colDef.sortFn);
   },
 
   /** @param {number} bytes @returns {string} */
@@ -785,25 +801,6 @@ Module.register("MMM-QBittorrent", {
 
   /** @param {string} state @returns {string} */
   formatStateName(state) {
-    const stateNames = {
-      downloading: "Downloading",
-      uploading: "Seeding",
-      pausedDL: "Paused",
-      pausedUP: "Paused",
-      stalledDL: "Stalled",
-      stalledUP: "Seeding",
-      queuedDL: "Queued",
-      queuedUP: "Queued",
-      checkingDL: "Checking",
-      checkingUP: "Checking",
-      forcedDL: "Downloading",
-      forcedUP: "Seeding",
-      metaDL: "Metadata",
-      allocating: "Allocating",
-      error: "Error",
-      missingFiles: "Missing Files"
-    };
-
-    return stateNames[state] || state;
+    return this.STATE_NAMES[state] || state;
   }
 });

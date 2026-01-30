@@ -6,7 +6,6 @@ const fs = require("fs")
 const path = require("path")
 
 const CONSTANTS = require("./lib/constants")
-const { QBConnectionError, QBAuthenticationError, QBTimeoutError } = require("./lib/errors")
 
 /**
  * @typedef {{connection: {host: string, username: string, password: string, tls: TLSConfig}, polling: {updateInterval: number, pollTimeout: number, maxConsecutiveFailures: number, pauseOnRepeatedFailures: boolean}, display: {maxItems: number, viewFilter: string, compact: boolean, scale: number}}} NormalizedHelperConfig
@@ -32,6 +31,9 @@ module.exports = NodeHelper.create({
     this.state = this.STATES.IDLE
     this.cachedTlsOptions = null
     this.currentPollInterval = null
+    this.isPolling = false
+    this.actionQueue = []
+    this.actionTimer = null
     this.log("Helper started")
   },
 
@@ -71,6 +73,7 @@ module.exports = NodeHelper.create({
 
   /** @param {Object} config @returns {NormalizedHelperConfig} */
   normalizeConfig(config) {
+    // Backward compat
     return {
       connection: {
         host: config.connection?.host ?? config.host ?? "",
@@ -190,6 +193,7 @@ module.exports = NodeHelper.create({
 
   /** @returns {Object} */
   loadTlsOptions() {
+    // Cache options
     if (this.cachedTlsOptions) {
       return this.cachedTlsOptions;
     }
@@ -261,6 +265,7 @@ module.exports = NodeHelper.create({
               get: (name) => {
                 const key = name.toLowerCase();
                 const value = res.headers[key];
+                // Join multiple cookies
                 if (key === 'set-cookie' && Array.isArray(value)) {
                   return value.join('; ');
                 }
@@ -381,56 +386,81 @@ module.exports = NodeHelper.create({
 
   /** @returns {Promise<void>} */
   async pollTorrents() {
-    this.log("Polling torrents...")
+    // Prevent overlaps
+    if (this.isPolling) return;
+    this.isPolling = true;
 
-    const data = await this.fetchTorrentData()
-    const baseInterval = this.config.polling?.updateInterval || 5000
+    try {
+      this.log("Polling torrents...")
 
-    if (data === null) {
-      this.consecutiveFailures++
-      this.log(`Poll failed. Consecutive failures: ${this.consecutiveFailures}`)
+      const data = await this.fetchTorrentData()
+      const baseInterval = this.config.polling?.updateInterval || 5000
 
-      const maxBackoffInterval = 40000
-      const newInterval = Math.min(
-        baseInterval * Math.pow(2, this.consecutiveFailures - 1),
-        maxBackoffInterval
-      )
+      if (data === null) {
+        this.consecutiveFailures++
+        this.log(`Poll failed. Consecutive failures: ${this.consecutiveFailures}`)
 
-      if (newInterval !== this.currentPollInterval) {
-        this.log(`Applying exponential backoff. Next poll in ${newInterval}ms`)
-        this.restartPollingWithInterval(newInterval)
-      }
+        // Exponential backoff
+        const maxBackoffInterval = 40000
+        const newInterval = Math.min(
+          baseInterval * Math.pow(2, this.consecutiveFailures - 1),
+          maxBackoffInterval
+        )
 
-      const maxFailures = this.config.polling?.maxConsecutiveFailures || 3
-      if (this.consecutiveFailures >= 1) {
-        if (this.consecutiveFailures >= maxFailures && this.config.polling?.pauseOnRepeatedFailures) {
-          this.setState(this.STATES.PAUSED)
-          this.log("Pausing polling due to repeated failures")
-        } else {
-          this.setState(this.STATES.ERROR)
+        if (newInterval !== this.currentPollInterval) {
+          this.log(`Applying exponential backoff. Next poll in ${newInterval}ms`)
+          this.restartPollingWithInterval(newInterval)
         }
-        this.sendSocketNotification("QB_ERROR", {
-          message: "Failed to connect to qBittorrent",
-          failures: this.consecutiveFailures,
-          willRetry: this.consecutiveFailures < maxFailures
-        })
-      }
-    } else {
-      if (this.consecutiveFailures > 0) {
-        this.log("Polling recovered after failures")
-        if (this.currentPollInterval !== baseInterval) {
-          this.restartPollingWithInterval(baseInterval)
+
+        const maxFailures = this.config.polling?.maxConsecutiveFailures || 3
+        if (this.consecutiveFailures >= 1) {
+          if (this.consecutiveFailures >= maxFailures && this.config.polling?.pauseOnRepeatedFailures) {
+            this.setState(this.STATES.PAUSED)
+            this.log("Pausing polling due to repeated failures")
+          } else {
+            this.setState(this.STATES.ERROR)
+          }
+          this.sendSocketNotification("QB_ERROR", {
+            message: "Failed to connect to qBittorrent",
+            failures: this.consecutiveFailures,
+            willRetry: this.consecutiveFailures < maxFailures
+          })
+        }
+      } else {
+        // Reset backoff
+        if (this.consecutiveFailures > 0) {
+          this.log("Polling recovered after failures")
+          if (this.currentPollInterval !== baseInterval) {
+            this.restartPollingWithInterval(baseInterval)
+          }
+        }
+        this.consecutiveFailures = 0
+        this.setState(this.STATES.POLLING)
+
+        this.sendSocketNotification("QB_UPDATE", data)
+
+        // Adaptive polling
+        const hasActiveTransfers = data.some(t =>
+          ['downloading', 'forcedDL', 'metaDL'].includes(t.state)
+        );
+        const idleMultiplier = 4;
+        const targetInterval = hasActiveTransfers
+          ? baseInterval
+          : baseInterval * idleMultiplier;
+
+        if (targetInterval !== this.currentPollInterval) {
+          this.log(`Poll interval: ${this.currentPollInterval}ms → ${targetInterval}ms (${hasActiveTransfers ? 'active' : 'idle'})`);
+          this.restartPollingWithInterval(targetInterval);
         }
       }
-      this.consecutiveFailures = 0
-      this.setState(this.STATES.POLLING)
-
-      this.sendSocketNotification("QB_UPDATE", data)
+    } finally {
+      this.isPolling = false;
     }
   },
 
   /** @returns {Promise<Array|null>} */
   async fetchTorrentData() {
+    // Wait for auth
     let waitCount = 0
     const maxWaitCount = 50
     while (this.state === this.STATES.AUTHENTICATING && waitCount < maxWaitCount) {
@@ -470,6 +500,7 @@ module.exports = NodeHelper.create({
       if (!res.ok) {
         this.log(`Fetch failed with status ${res.status}`)
 
+        // Re-auth on 401/403
         if (res.status === 403 || res.status === 401) {
           this.log("Auth may have expired, clearing cookie")
           this.authCookie = null
@@ -494,46 +525,79 @@ module.exports = NodeHelper.create({
 
   /** @param {{hash: string, action: string}} payload @returns {Promise<void>} */
   async handleAction(payload) {
-    const { hash, action } = payload
-    this.log(`Handling action: ${action} for torrent ${hash}`)
+    // Batch actions
+    this.actionQueue.push(payload);
+    if (!this.actionTimer) {
+      this.actionTimer = setTimeout(() => this.flushActions(), 100);
+    }
+  },
 
-    const host = this.config.connection.host
-    let endpoint = ""
+  /** @returns {Promise<void>} */
+  async flushActions() {
+    this.actionTimer = null;
+    const queue = this.actionQueue;
+    this.actionQueue = [];
 
-    switch (action) {
-      case "start":
-      case "resume":
-        endpoint = "/api/v2/torrents/resume"
-        break
-      case "pause":
-        endpoint = "/api/v2/torrents/pause"
-        break
-      default:
-        this.log(`Unknown action: ${action}`)
-        return
+    if (queue.length === 0) return;
+
+    this.log(`Flushing ${queue.length} queued action(s)`);
+
+    // Group and dedupe
+    const grouped = {};
+    for (const { hash, action } of queue) {
+      const normalized = (action === 'start') ? 'resume' : action;
+      if (!grouped[normalized]) grouped[normalized] = new Set();
+      grouped[normalized].add(hash);
     }
 
-    try {
-      const res = await this.makeHttpRequest({
-        url: `${host}${endpoint}`,
-        method: "POST",
-        headers: {
-          Cookie: this.authCookie,
-          "Content-Type": "application/x-www-form-urlencoded"
-        },
-        body: `hashes=${hash}`,
-        timeout: 5000
-      })
+    const host = this.config.connection.host;
 
-      if (res.ok) {
-        this.log(`Action ${action} successful`)
-        this.pollTorrents()
-      } else {
-        this.log(`Action ${action} failed with status ${res.status}`)
+    for (const [action, hashes] of Object.entries(grouped)) {
+      let endpoint = "";
+
+      switch (action) {
+        case "resume":
+          endpoint = "/api/v2/torrents/resume";
+          break;
+        case "pause":
+          endpoint = "/api/v2/torrents/pause";
+          break;
+        default:
+          this.log(`Unknown action: ${action}`);
+          continue;
       }
-    } catch (e) {
-      this.log(`Action error: ${e.message}`)
+
+      try {
+        this.log(`Batch ${action}: ${hashes.size} torrent(s)`);
+        const res = await this.makeHttpRequest({
+          url: `${host}${endpoint}`,
+          method: "POST",
+          headers: {
+            Cookie: this.authCookie,
+            "Content-Type": "application/x-www-form-urlencoded"
+          },
+          body: `hashes=${[...hashes].join('|')}`,
+          timeout: 5000
+        });
+
+        if (res.ok) {
+          this.log(`Batch action ${action} successful`);
+        } else {
+          this.log(`Batch action ${action} failed with status ${res.status}`);
+        }
+      } catch (e) {
+        this.log(`Batch action error: ${e.message}`);
+      }
     }
+
+    // Reset interval
+    const baseInterval = this.config.polling?.updateInterval || 5000;
+    if (this.currentPollInterval !== baseInterval) {
+      this.restartPollingWithInterval(baseInterval);
+    }
+
+    // Poll immediately
+    await this.pollTorrents();
   },
 
   /** @param {string} notification @param {any} payload */
