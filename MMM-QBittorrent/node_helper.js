@@ -318,7 +318,6 @@ module.exports = NodeHelper.create({
         })
 
         const responseText = await res.text()
-        this.log(`Auth response body: ${responseText}`)
         this.log(`Auth response status: ${res.status}`)
 
         if (!res.ok) {
@@ -336,12 +335,11 @@ module.exports = NodeHelper.create({
 
         if (!cookies) {
             this.log("Auth failed: No session cookie received")
-            this.log(`All response headers: ${JSON.stringify(res.headers.raw)}`)
             return false
         }
 
         this.authCookie = cookies
-        this.log(`Authenticated successfully. Cookie set: ${cookies}`)
+        this.log("Authenticated successfully. Session cookie received.")
         return true
     } catch (e) {
         this.log(`Auth error: ${e.message}`)
@@ -358,7 +356,7 @@ module.exports = NodeHelper.create({
 
     this.consecutiveFailures = 0
     this.setState(this.STATES.POLLING)
-    this.currentPollInterval = this.config.polling?.updateInterval || 5000
+    this.currentPollInterval = this.config.polling?.updateInterval || CONSTANTS.DEFAULT_UPDATE_INTERVAL_MS
 
     this.pollTorrents()
 
@@ -394,17 +392,16 @@ module.exports = NodeHelper.create({
       this.log("Polling torrents...")
 
       const data = await this.fetchTorrentData()
-      const baseInterval = this.config.polling?.updateInterval || 5000
+      const baseInterval = this.config.polling?.updateInterval || CONSTANTS.DEFAULT_UPDATE_INTERVAL_MS
 
       if (data === null) {
         this.consecutiveFailures++
         this.log(`Poll failed. Consecutive failures: ${this.consecutiveFailures}`)
 
         // Exponential backoff
-        const maxBackoffInterval = 40000
         const newInterval = Math.min(
           baseInterval * Math.pow(2, this.consecutiveFailures - 1),
-          maxBackoffInterval
+          CONSTANTS.MAX_BACKOFF_MS
         )
 
         if (newInterval !== this.currentPollInterval) {
@@ -591,7 +588,7 @@ module.exports = NodeHelper.create({
     }
 
     // Reset interval
-    const baseInterval = this.config.polling?.updateInterval || 5000;
+    const baseInterval = this.config.polling?.updateInterval || CONSTANTS.DEFAULT_UPDATE_INTERVAL_MS;
     if (this.currentPollInterval !== baseInterval) {
       this.restartPollingWithInterval(baseInterval);
     }
