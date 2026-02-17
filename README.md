@@ -5,7 +5,7 @@ MagicMirror module for monitoring and controlling qBittorrent.
 ![MagicMirror](https://img.shields.io/badge/MagicMirror-v2.33.0-blue)
 ![Torrent](https://img.shields.io/badge/QBittorrent-green)
 ![Module](https://img.shields.io/badge/Module-Display-orange)
-![Version](https://img.shields.io/badge/Version-1.1.2-yellow)
+![Version](https://img.shields.io/badge/Version-1.1.5-yellow)
 ![License](https://img.shields.io/badge/License-MIT-lightgrey)
 
 <p align="center">
@@ -87,6 +87,11 @@ For HTTPS connections with self-signed certificates, either:
 - Provide CA certificate path in `connection.tls.ca` (recommended)
 
 For mutual TLS authentication, provide both `connection.tls.cert` and `connection.tls.key`.
+
+For simple local access you can also try to enable QBittorrent/WebUI settings:
+- Bypass authentication for clients on localhost
+- Bypass authentication for clients in whitelisted IP subnets
+and specify the subnet you use locally.
 
 ## License
 
