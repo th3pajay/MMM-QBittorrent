@@ -22,6 +22,14 @@ Module.register("MMM-QBittorrent", {
     checkingUP: 'stalled', allocating: 'stalled', pausedDL: 'stalled'
   },
 
+  STATE_COLOR_MAP: {
+    downloading: 'downloading', forcedDL: 'downloading', metaDL: 'downloading',
+    uploading: 'seeding', forcedUP: 'seeding', stalledUP: 'seeding', queuedUP: 'seeding', pausedUP: 'seeding',
+    pausedDL: 'paused',
+    stalledDL: 'stalled', queuedDL: 'stalled', checkingDL: 'stalled', checkingUP: 'stalled', allocating: 'stalled',
+    error: 'error', missingFiles: 'error'
+  },
+
   STATE_NAMES: {
     downloading: "Downloading",
     uploading: "Seeding",
@@ -179,13 +187,11 @@ Module.register("MMM-QBittorrent", {
     viewFilter: "all",
     compact: false,
     scale: 0.6,
-    display: {
-      columns: ['name', 'progress', 'status', 'dlspeed', 'eta', 'actions'],
-      sortBy: 'added_on',
-      sortOrder: 'desc',
-      showProgressBar: true,
-      headerAlign: null  // auto-detect from position
-    }
+    columns: ['name', 'progress', 'status', 'dlspeed', 'eta', 'actions'],
+    sortBy: 'added_on',
+    sortOrder: 'desc',
+    showProgressBar: true,
+    headerAlign: null,
   },
 
   start() {
@@ -206,6 +212,7 @@ Module.register("MMM-QBittorrent", {
     this.normalizedConfig = this.normalizeConfig();
 
     this.boundClickHandler = (e) => {
+      if (e.type === 'touchend') e.preventDefault();
       const btn = e.target.closest('.qb-action');
       if (!btn) return;
       const wrapper = btn.closest('.mmm-qb');
@@ -217,6 +224,7 @@ Module.register("MMM-QBittorrent", {
 
     this.isListenerAttached = true;
     document.addEventListener('click', this.boundClickHandler);
+    document.addEventListener('touchend', this.boundClickHandler);
 
     console.log("[MMM-QBittorrent] Sending QB_INIT to node_helper with config:", {
       host: this.config.host,
@@ -233,6 +241,7 @@ Module.register("MMM-QBittorrent", {
     console.log("[MMM-QBittorrent] Stopping module...");
     if (this.boundClickHandler) {
       document.removeEventListener('click', this.boundClickHandler);
+      document.removeEventListener('touchend', this.boundClickHandler);
       this.boundClickHandler = null;
     }
   },
@@ -241,6 +250,7 @@ Module.register("MMM-QBittorrent", {
     console.log("[MMM-QBittorrent] Suspending polling");
     if (this.boundClickHandler && this.isListenerAttached) {
       document.removeEventListener('click', this.boundClickHandler);
+      document.removeEventListener('touchend', this.boundClickHandler);
       this.isListenerAttached = false;
     }
     this.sendSocketNotification("QB_SUSPEND", {});
@@ -250,6 +260,7 @@ Module.register("MMM-QBittorrent", {
     console.log("[MMM-QBittorrent] Resuming polling");
     if (this.boundClickHandler && !this.isListenerAttached) {
       document.addEventListener('click', this.boundClickHandler);
+      document.addEventListener('touchend', this.boundClickHandler);
       this.isListenerAttached = true;
     }
     this.sendSocketNotification("QB_RESUME", {});
@@ -337,7 +348,7 @@ Module.register("MMM-QBittorrent", {
     try {
       const config = this.normalizedConfig;
 
-      wrapper.className = `mmm-qb${config.compact ? " compact" : ""}`;
+      wrapper.className = `mmm-qb${config.compact ? " compact" : ""}${config.colors.rowTint ? " qb-tint" : ""}`;
       wrapper.dataset.moduleId = this.moduleId;
       wrapper.style.transform = `scale(${config.scale})`;
 
@@ -440,6 +451,9 @@ Module.register("MMM-QBittorrent", {
       return;
     }
 
+    const speedSpan = wrapper.querySelector('.qb-header-speed');
+    if (speedSpan) speedSpan.textContent = this.formatAggregateSpeed();
+
     const config = this.normalizedConfig;
     const displayTorrents = this.getDisplayTorrents(config);
 
@@ -473,6 +487,10 @@ Module.register("MMM-QBittorrent", {
             progressBar.style.width = percent;
             const stateClass = this.getProgressBarStateClass(torrent.state, torrent.progress);
             progressBar.className = `qb-progress-bar ${stateClass}`;
+            const barColors = config.colors.progressBar;
+            const colorGroup = this.STATE_CLASS_MAP[torrent.state] || 'downloading';
+            const customColor = barColors[colorGroup];
+            progressBar.style.background = customColor || '';
           }
           if (progressText) progressText.textContent = percent;
           break;
@@ -482,6 +500,10 @@ Module.register("MMM-QBittorrent", {
           if (badge) {
             badge.className = `qb-status-badge status-${torrent.state}`;
             badge.textContent = this.formatStateName(torrent.state);
+            const badgeColors = config.colors.statusBadge;
+            const colorGroup = this.STATE_COLOR_MAP[torrent.state] || 'stalled';
+            const customColor = badgeColors[colorGroup];
+            badge.style.backgroundColor = customColor || '';
           }
           break;
         }
@@ -514,11 +536,11 @@ Module.register("MMM-QBittorrent", {
       scale: this.config.display?.scale ?? this.config.scale ?? 0.6,
       maxItems: this.config.display?.maxItems ?? this.config.maxItems ?? 5,
       viewFilter: this.config.display?.viewFilter ?? this.config.viewFilter ?? "all",
-      columns: this.config.display?.columns ?? ['name', 'progress', 'status', 'dlspeed', 'eta', 'actions'],
-      sortBy: this.config.display?.sortBy ?? 'added_on',
-      sortOrder: this.config.display?.sortOrder ?? 'desc',
-      showProgressBar: this.config.display?.showProgressBar ?? true,
-      headerAlign: this.config.display?.headerAlign ?? null
+      columns:         this.config.display?.columns         ?? this.config.columns         ?? ['name', 'progress', 'status', 'dlspeed', 'eta', 'actions'],
+      sortBy:          this.config.display?.sortBy          ?? this.config.sortBy          ?? 'added_on',
+      sortOrder:       this.config.display?.sortOrder       ?? this.config.sortOrder       ?? 'desc',
+      showProgressBar: this.config.display?.showProgressBar ?? this.config.showProgressBar ?? true,
+      headerAlign:     this.config.display?.headerAlign     ?? this.config.headerAlign     ?? null
     };
 
     if (typeof config.scale !== 'number' || config.scale <= 0 || config.scale > 10) {
@@ -543,6 +565,23 @@ Module.register("MMM-QBittorrent", {
     if (config.sortOrder !== 'asc' && config.sortOrder !== 'desc') {
       config.sortOrder = 'desc';
     }
+
+    const rawColors = this.config.display?.colors || {};
+    config.colors = {
+      rowTint: rawColors.rowTint === true,
+      progressBar: {
+        downloading: rawColors.progressBar?.downloading ?? null,
+        seeding:     rawColors.progressBar?.seeding     ?? null,
+        stalled:     rawColors.progressBar?.stalled     ?? null,
+      },
+      statusBadge: {
+        downloading: rawColors.statusBadge?.downloading ?? null,
+        seeding:     rawColors.statusBadge?.seeding     ?? null,
+        paused:      rawColors.statusBadge?.paused      ?? null,
+        error:       rawColors.statusBadge?.error       ?? null,
+        stalled:     rawColors.statusBadge?.stalled     ?? null,
+      }
+    };
 
     return config;
   },
@@ -594,10 +633,15 @@ Module.register("MMM-QBittorrent", {
     headerText.className = "qb-module-header";
     headerText.textContent = "QBittorrent";
 
+    const speedSpan = document.createElement("span");
+    speedSpan.className = "qb-header-speed";
+    speedSpan.textContent = this.formatAggregateSpeed();
+
     const separator = document.createElement("hr");
     separator.className = "qb-header-separator";
 
     headerContainer.appendChild(headerText);
+    headerContainer.appendChild(speedSpan);
     headerContainer.appendChild(separator);
 
     return headerContainer;
@@ -667,10 +711,10 @@ Module.register("MMM-QBittorrent", {
 
       switch (columnName) {
         case 'progress':
-          this.renderProgressCell(td, torrent, config.showProgressBar);
+          this.renderProgressCell(td, torrent, config.showProgressBar, config.colors.progressBar);
           break;
         case 'status':
-          this.renderStatusCell(td, torrent);
+          this.renderStatusCell(td, torrent, config.colors.statusBadge);
           break;
         case 'actions':
           this.renderActionsCell(td, torrent);
@@ -687,8 +731,8 @@ Module.register("MMM-QBittorrent", {
     return row;
   },
 
-  /** @param {HTMLElement} td @param {TorrentData} torrent @param {boolean} showBar */
-  renderProgressCell(td, torrent, showBar) {
+  /** @param {HTMLElement} td @param {TorrentData} torrent @param {boolean} showBar @param {object|null} barColors */
+  renderProgressCell(td, torrent, showBar, barColors) {
     const progressData = this.COLUMN_DEFINITIONS.progress.formatter.call(this, torrent.progress, torrent);
 
     const container = document.createElement("div");
@@ -705,6 +749,12 @@ Module.register("MMM-QBittorrent", {
       const stateClass = this.getProgressBarStateClass(torrent.state, torrent.progress);
       if (stateClass) {
         bar.classList.add(stateClass);
+      }
+
+      if (barColors) {
+        const colorGroup = this.STATE_CLASS_MAP[torrent.state] || 'downloading';
+        const customColor = barColors[colorGroup];
+        if (customColor) bar.style.background = customColor;
       }
 
       if (torrent.progress === 1 && !this.completed.has(torrent.hash)) {
@@ -737,13 +787,19 @@ Module.register("MMM-QBittorrent", {
     return this.STATE_CLASS_MAP[state] || 'downloading';
   },
 
-  /** @param {HTMLElement} td @param {TorrentData} torrent */
-  renderStatusCell(td, torrent) {
+  /** @param {HTMLElement} td @param {TorrentData} torrent @param {object|null} badgeColors */
+  renderStatusCell(td, torrent, badgeColors) {
     const statusData = this.COLUMN_DEFINITIONS.status.formatter.call(this, torrent.state, torrent);
 
     const badge = document.createElement("span");
     badge.className = `qb-status-badge status-${statusData.state}`;
     badge.textContent = statusData.displayText;
+
+    if (badgeColors) {
+      const colorGroup = this.STATE_COLOR_MAP[torrent.state] || 'stalled';
+      const customColor = badgeColors[colorGroup];
+      if (customColor) badge.style.backgroundColor = customColor;
+    }
 
     td.appendChild(badge);
   },
@@ -805,11 +861,24 @@ Module.register("MMM-QBittorrent", {
     else if (diffDays < 30) return `${Math.floor(diffDays / 7)}w ago`;
 
     const options = { month: 'short', day: 'numeric', year: 'numeric' };
-    return date.toLocaleDateString(config.language || navigator.language || 'en-US', options);
+    return date.toLocaleDateString(this.config.language || navigator.language || 'en-US', options);
   },
 
   /** @param {string} state @returns {string} */
   formatStateName(state) {
     return this.STATE_NAMES[state] || state;
+  },
+
+  /** @returns {string} */
+  formatAggregateSpeed() {
+    let totalDl = 0, totalUp = 0;
+    for (const t of this.torrents.values()) {
+      totalDl += t.dlspeed || 0;
+      totalUp += t.upspeed || 0;
+    }
+    const parts = [];
+    if (totalDl > 0) parts.push(`↓ ${this.formatSpeed(totalDl)}`);
+    if (totalUp > 0) parts.push(`↑ ${this.formatSpeed(totalUp)}`);
+    return parts.join('  ');
   }
 });
