@@ -1,9 +1,5 @@
-/**
- * @typedef {{hash: string, name: string, progress: number, state: string, size: number, dlspeed: number, upspeed: number, eta: number, ratio: number, num_seeds: number, num_leechs: number, added_on: number, completed?: number}} TorrentData
- * @typedef {{compact: boolean, scale: number, maxItems: number, viewFilter: string, columns: string[], sortBy: string, sortOrder: string, showProgressBar: boolean, headerAlign: string|null}} NormalizedConfig
- */
-
 Module.register("MMM-QBittorrent", {
+  // Browser-side mirror of lib/constants.js — keep in sync (browser cannot require())
   CONSTANTS: {
     PULSE_DURATION_MS: 1000,
     DEFAULT_POLL_TIMEOUT_MS: 2000,
@@ -19,7 +15,8 @@ Module.register("MMM-QBittorrent", {
     uploading: 'seeding', forcedUP: 'seeding', stalledUP: 'seeding',
     queuedUP: 'seeding', pausedUP: 'seeding',
     stalledDL: 'stalled', queuedDL: 'stalled', checkingDL: 'stalled',
-    checkingUP: 'stalled', allocating: 'stalled', pausedDL: 'stalled'
+    checkingUP: 'stalled', allocating: 'stalled', pausedDL: 'stalled',
+    error: 'error', missingFiles: 'error'
   },
 
   STATE_COLOR_MAP: {
@@ -173,8 +170,7 @@ Module.register("MMM-QBittorrent", {
       label: 'Actions',
       field: null,
       align: 'center',
-      sortable: false,
-      formatter: function(value, torrent) { return torrent.hash; }
+      sortable: false
     }
   },
 
@@ -210,6 +206,8 @@ Module.register("MMM-QBittorrent", {
     this.cachedDisplayTorrents = null;
     this.cachedConfigHash = null;
     this.normalizedConfig = this.normalizeConfig();
+    this.pulseTimers = new Map();
+    this.sslWarning = null;
 
     this.boundClickHandler = (e) => {
       if (e.type === 'touchend') e.preventDefault();
@@ -243,6 +241,10 @@ Module.register("MMM-QBittorrent", {
       document.removeEventListener('click', this.boundClickHandler);
       document.removeEventListener('touchend', this.boundClickHandler);
       this.boundClickHandler = null;
+    }
+    if (this.pulseTimers) {
+      for (const id of this.pulseTimers.values()) clearTimeout(id);
+      this.pulseTimers.clear();
     }
   },
 
@@ -330,6 +332,10 @@ Module.register("MMM-QBittorrent", {
       } else {
         console.log("[MMM-QBittorrent] No data changes, skipping DOM update");
       }
+    }
+    else if (notification === "QB_WARN") {
+      this.sslWarning = payload.message;
+      this.updateDom();
     }
     else if (notification === "QB_ERROR") {
       console.error("[MMM-QBittorrent] Received QB_ERROR:", payload);
@@ -512,7 +518,12 @@ Module.register("MMM-QBittorrent", {
         default: {
           const fieldValue = colDef.field ? torrent[colDef.field] : null;
           const formatted = colDef.formatter.call(this, fieldValue, torrent);
-          td.textContent = formatted;
+          if (typeof formatted === 'object' && formatted !== null) {
+            console.error(`[MMM-QBittorrent] Column '${columnName}' formatter returned object; add a switch case`);
+            td.textContent = '';
+          } else {
+            td.textContent = formatted ?? '';
+          }
         }
       }
     }
@@ -573,6 +584,7 @@ Module.register("MMM-QBittorrent", {
         downloading: rawColors.progressBar?.downloading ?? null,
         seeding:     rawColors.progressBar?.seeding     ?? null,
         stalled:     rawColors.progressBar?.stalled     ?? null,
+        error:       rawColors.progressBar?.error       ?? null,
       },
       statusBadge: {
         downloading: rawColors.statusBadge?.downloading ?? null,
@@ -642,6 +654,15 @@ Module.register("MMM-QBittorrent", {
 
     headerContainer.appendChild(headerText);
     headerContainer.appendChild(speedSpan);
+
+    if (this.sslWarning) {
+      const warning = document.createElement("span");
+      warning.className = "qb-ssl-warning";
+      warning.textContent = "⚠ SSL off";
+      warning.title = this.sslWarning;
+      headerContainer.appendChild(warning);
+    }
+
     headerContainer.appendChild(separator);
 
     return headerContainer;
@@ -680,7 +701,7 @@ Module.register("MMM-QBittorrent", {
       if (!colDef) return;
 
       const th = document.createElement("th");
-      th.className = `qb-th ${colDef.className || 'col-' + columnName}`;
+      th.className = `qb-th col-${columnName}`;
       th.textContent = colDef.label;
       th.style.textAlign = colDef.align;
 
@@ -702,7 +723,7 @@ Module.register("MMM-QBittorrent", {
       if (!colDef) return;
 
       const td = document.createElement("td");
-      td.className = `qb-td ${colDef.className || 'col-' + columnName}`;
+      td.className = `qb-td col-${columnName}`;
       td.style.textAlign = colDef.align;
 
       if (colDef.bold) {
@@ -719,10 +740,16 @@ Module.register("MMM-QBittorrent", {
         case 'actions':
           this.renderActionsCell(td, torrent);
           break;
-        default:
+        default: {
           const fieldValue = colDef.field ? torrent[colDef.field] : null;
           const formatted = colDef.formatter.call(this, fieldValue, torrent);
-          td.textContent = formatted;
+          if (typeof formatted === 'object' && formatted !== null) {
+            console.error(`[MMM-QBittorrent] Column '${columnName}' formatter returned object; add a switch case`);
+            td.textContent = '';
+          } else {
+            td.textContent = formatted ?? '';
+          }
+        }
       }
 
       row.appendChild(td);
@@ -760,7 +787,14 @@ Module.register("MMM-QBittorrent", {
       if (torrent.progress === 1 && !this.completed.has(torrent.hash)) {
         bar.classList.add("pulse");
         this.completed.add(torrent.hash);
-        setTimeout(() => bar.classList.remove("pulse"), this.CONSTANTS.PULSE_DURATION_MS);
+        if (this.pulseTimers.has(torrent.hash)) {
+          clearTimeout(this.pulseTimers.get(torrent.hash));
+        }
+        const timerId = setTimeout(() => {
+          bar.classList.remove("pulse");
+          this.pulseTimers.delete(torrent.hash);
+        }, this.CONSTANTS.PULSE_DURATION_MS);
+        this.pulseTimers.set(torrent.hash, timerId);
       }
 
       barContainer.appendChild(bar);
