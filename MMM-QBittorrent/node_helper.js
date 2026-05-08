@@ -168,6 +168,7 @@ module.exports = NodeHelper.create({
               this.log(`WARNING: Private key file ${resolved} has overly permissive permissions (${mode.toString(8)}). Consider: chmod 600 ${resolved}`);
             }
           } catch (e) {
+            this.log(`Key permissions check failed: ${e.message}`);
           }
         }
       }
@@ -264,7 +265,7 @@ module.exports = NodeHelper.create({
               get: (name) => {
                 const key = name.toLowerCase();
                 const value = res.headers[key];
-                  if (key === 'set-cookie' && Array.isArray(value)) {
+                if (key === 'set-cookie' && Array.isArray(value)) {
                   return value.join('; ');
                 }
                 return value;
@@ -307,43 +308,43 @@ module.exports = NodeHelper.create({
     this.log("Authenticating...")
 
     try {
-        const res = await this.makeHttpRequest({
-            url: `${host}/api/v2/auth/login`,
-            method: "POST",
-            headers: { "Content-Type": "application/x-www-form-urlencoded" },
-            body: `username=${encodeURIComponent(username)}&password=${encodeURIComponent(password)}`,
-            timeout: 5000
-        })
+      const res = await this.makeHttpRequest({
+        url: `${host}${CONSTANTS.API_AUTH_LOGIN}`,
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: `username=${encodeURIComponent(username)}&password=${encodeURIComponent(password)}`,
+        timeout: 5000
+      })
 
-        const responseText = await res.text()
-        this.log(`Auth response status: ${res.status}`)
+      const responseText = await res.text()
+      this.log(`Auth response status: ${res.status}`)
 
-        if (!res.ok) {
-            this.log(`Auth failed with HTTP status ${res.status}`)
-            return false
-        }
-
-        if (responseText !== "Ok.") {
-            this.log(`Auth failed: qBittorrent returned "${responseText}"`)
-            this.log("Verify username and password are correct")
-            return false
-        }
-
-        const cookies = res.headers.get("set-cookie")
-
-        if (!cookies) {
-            this.log("Auth failed: No session cookie received")
-            return false
-        }
-
-        this.authCookie = cookies
-        this.log("Authenticated successfully. Session cookie received.")
-        return true
-    } catch (e) {
-        this.log(`Auth error: ${e.message}`)
+      if (!res.ok) {
+        this.log(`Auth failed with HTTP status ${res.status}`)
         return false
+      }
+
+      if (responseText !== "Ok.") {
+        this.log(`Auth failed: qBittorrent returned "${responseText}"`)
+        this.log("Verify username and password are correct")
+        return false
+      }
+
+      const cookies = res.headers.get("set-cookie")
+
+      if (!cookies) {
+        this.log("Auth failed: No session cookie received")
+        return false
+      }
+
+      this.authCookie = cookies
+      this.log("Authenticated successfully. Session cookie received.")
+      return true
+    } catch (e) {
+      this.log(`Auth error: ${e.message}`)
+      return false
     }
-},
+  },
 
   startPolling() {
     this.log("Starting polling...")
@@ -389,7 +390,7 @@ module.exports = NodeHelper.create({
     try {
       this.log("Polling torrents...")
 
-      const data = await this.fetchTorrentData()
+      const data = await this.fetchData()
 
       if (this.pollGeneration !== generation) {
         this.log("Poll superseded by re-initialization, discarding results")
@@ -439,15 +440,14 @@ module.exports = NodeHelper.create({
         this.consecutiveFailures = 0
         this.setState(this.STATES.POLLING)
 
-        this.sendSocketNotification("QB_UPDATE", data)
+        this.sendSocketNotification("QB_UPDATE", { torrents: data.torrents, transferInfo: data.transferInfo })
 
-        const hasActiveTransfers = data.some(t =>
+        const hasActiveTransfers = data.torrents.some(t =>
           ['downloading', 'forcedDL', 'metaDL'].includes(t.state)
         );
-        const idleMultiplier = 4;
         const targetInterval = hasActiveTransfers
           ? baseInterval
-          : baseInterval * idleMultiplier;
+          : baseInterval * CONSTANTS.IDLE_POLL_MULTIPLIER;
 
         if (targetInterval !== this.currentPollInterval) {
           this.log(`Poll interval: ${this.currentPollInterval}ms → ${targetInterval}ms (${hasActiveTransfers ? 'active' : 'idle'})`);
@@ -459,8 +459,8 @@ module.exports = NodeHelper.create({
     }
   },
 
-  /** @returns {Promise<Array|null>} */
-  async fetchTorrentData() {
+  /** @returns {Promise<{torrents: Array, transferInfo: Object|null}|null>} */
+  async fetchData() {
     let waitCount = 0
     const maxWaitCount = 50
     while (this.state === this.STATES.AUTHENTICATING && waitCount < maxWaitCount) {
@@ -486,21 +486,28 @@ module.exports = NodeHelper.create({
     }
 
     const host = this.config.connection.host
-    const endpoint = "/api/v2/torrents/info"
     const timeout = this.config.polling.pollTimeout
 
     try {
-      const res = await this.makeHttpRequest({
-        url: `${host}${endpoint}`,
-        method: "GET",
-        headers: { Cookie: this.authCookie },
-        timeout: timeout
-      })
+      const [torrentsRes, transferRes] = await Promise.all([
+        this.makeHttpRequest({
+          url: `${host}${CONSTANTS.API_TORRENTS_INFO}`,
+          method: "GET",
+          headers: { Cookie: this.authCookie },
+          timeout: timeout
+        }),
+        this.makeHttpRequest({
+          url: `${host}${CONSTANTS.API_TRANSFER_INFO}`,
+          method: "GET",
+          headers: { Cookie: this.authCookie },
+          timeout: timeout
+        }).catch(e => { this.log(`Transfer info fetch error: ${e.message}`); return null })
+      ])
 
-      if (!res.ok) {
-        this.log(`Fetch failed with status ${res.status}`)
+      if (!torrentsRes.ok) {
+        this.log(`Fetch failed with status ${torrentsRes.status}`)
 
-        if (res.status === 403 || res.status === 401) {
+        if (torrentsRes.status === 403 || torrentsRes.status === 401) {
           this.log("Auth may have expired, clearing cookie")
           this.authCookie = null
         }
@@ -508,13 +515,23 @@ module.exports = NodeHelper.create({
         return null
       }
 
-      const data = await res.json()
-      if (!Array.isArray(data)) {
-        this.log(`Unexpected API response type: ${typeof data}`)
+      const torrents = await torrentsRes.json()
+      if (!Array.isArray(torrents)) {
+        this.log(`Unexpected API response type: ${typeof torrents}`)
         return null
       }
-      this.log(`Fetched ${data.length} torrents`)
-      return data
+      this.log(`Fetched ${torrents.length} torrents`)
+
+      let transferInfo = null
+      if (transferRes && transferRes.ok) {
+        try {
+          transferInfo = await transferRes.json()
+        } catch (e) {
+          this.log(`Transfer info parse error: ${e.message}`)
+        }
+      }
+
+      return { torrents, transferInfo }
 
     } catch (e) {
       if (e.message === 'Request timeout') {
@@ -526,8 +543,8 @@ module.exports = NodeHelper.create({
     }
   },
 
-  /** @param {{hash: string, action: string}} payload @returns {Promise<void>} */
-  async handleAction(payload) {
+  /** @param {{hash: string, action: string}} payload */
+  handleAction(payload) {
     this.actionQueue.push(payload);
     if (!this.actionTimer) {
       this.actionTimer = setTimeout(() => this.flushActions(), 100);
@@ -558,10 +575,10 @@ module.exports = NodeHelper.create({
 
       switch (action) {
         case "resume":
-          endpoint = "/api/v2/torrents/resume";
+          endpoint = CONSTANTS.API_TORRENTS_RESUME;
           break;
         case "pause":
-          endpoint = "/api/v2/torrents/pause";
+          endpoint = CONSTANTS.API_TORRENTS_PAUSE;
           break;
         default:
           this.log(`Unknown action: ${action}`);
@@ -585,6 +602,10 @@ module.exports = NodeHelper.create({
           this.log(`Batch action ${action} successful`);
         } else {
           this.log(`Batch action ${action} failed with status ${res.status}`);
+          if (res.status === 401 || res.status === 403) {
+            this.log("Auth may have expired, clearing cookie");
+            this.authCookie = null;
+          }
         }
       } catch (e) {
         this.log(`Batch action error: ${e.message}`);
@@ -620,6 +641,10 @@ module.exports = NodeHelper.create({
       }
 
       this.startPolling()
+
+      if (this.config.connection.tls.rejectUnauthorized === false) {
+        this.sendSocketNotification("QB_WARN", { message: "SSL certificate validation disabled" })
+      }
     }
     else if (notification === "QB_ACTION") {
       this.handleAction(payload)

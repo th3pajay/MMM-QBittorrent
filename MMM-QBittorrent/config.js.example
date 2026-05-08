@@ -2,42 +2,59 @@
   module: "MMM-QBittorrent",
   position: "bottom_left",
   config: {
-    // ---- Required ----
-    host: "http://localhost:8080",  // qBittorrent Web UI URL (http:// or https://)
-
-    // ---- Credentials (omit if not required) ----
+    host: "http://localhost:8080",   // required — qBittorrent Web UI URL (http:// or https://)
     username: "",
     password: "",
 
-    // ---- Display ----
-    maxItems: 5,                    // Max torrents to show (max: 50)
-    viewFilter: "all",              // "all" | "downloading" | "completed" | "paused"
-    columns: [                      // Available: name, size, progress, status, seeds, peers,
-      'name',                       //            dlspeed, upspeed, eta, ratio, added_on, actions
-      'progress',
-      'status',
-      'dlspeed',
-      'eta',
-      'actions'
-    ],
-    sortBy: 'added_on',             // Any column name listed above
-    sortOrder: 'desc',              // "asc" | "desc"
-    compact: false,                 // Reduced row spacing
-    scale: 0.6,                     // Display scale (0.01 – 10)
-    showProgressBar: true,          // false = show percentage text only
+    display: {
+      maxItems: 5,                   // max torrents shown (hard cap: 50)
+      viewFilter: "all",             // "all" | "downloading" | "completed" | "paused"
+      columns: [                     // available: name, size, progress, status, seeds, peers,
+        'name',                      //            dlspeed, upspeed, eta, ratio, added_on, actions
+        'progress',
+        'status',
+        'dlspeed',
+        'eta',
+        'ratio',
+        'actions'
+      ],
+      sortBy: 'added_on',            // any column name above
+      sortOrder: 'desc',             // "asc" | "desc"
+      compact: false,                // tighter row spacing
+      scale: 0.6,                    // display scale (0.01 – 10)
+      showProgressBar: true,         // false = percentage text only
 
-    // ---- Advanced (uncomment to override defaults) ----
-    // updateInterval: 5000,        // Poll frequency in ms (min: 1000)
-    // pollTimeout: 2000,           // Request timeout in ms (min: 500)
-    // rejectUnauthorized: true,    // false = accept self-signed TLS certificates
+      // headerDetails: {            // stats panel below the module title
+      //   show: true,
+      //   components: [             // remove any entry to hide that stat
+      //     'downloadedSession',    // bytes downloaded this session
+      //     'uploadedSession',      // bytes uploaded this session
+      //     'downloadLimit',        // global DL cap (∞ = unlimited)
+      //     'uploadLimit',          // global UL cap (∞ = unlimited)
+      //     'totalShareRatio',      // uploaded / downloaded across all torrents
+      //     'completionRatio',      // % of torrents fully downloaded
+      //     'connectedSeeds',       // sum of connected seeds
+      //     'connectedLeechers',    // sum of connected leechers
+      //     'totalPeers',           // seeds + leechers combined
+      //   ]
+      // },
 
-    // ---- Color overrides (uncomment to customize) ----
-    // display: {
-    //   colors: {
-    //     rowTint: false,
-    //     progressBar: { downloading: null, seeding: null, stalled: null },
-    //     statusBadge: { downloading: null, seeding: null, paused: null, error: null, stalled: null }
+      // colors: {                   // override state colours
+      //   rowTint: false,
+      //   progressBar: { downloading: null, seeding: null, stalled: null },
+      //   statusBadge: { downloading: null, seeding: null, paused: null, error: null, stalled: null }
+      // },
+    },
+
+    // polling: {
+    //   updateInterval: 5000,       // ms between polls (min: 1000)
+    //   pollTimeout: 2000,          // request timeout in ms (min: 500)
+    // },
+
+    // connection: {
+    //   tls: {
+    //     rejectUnauthorized: true, // false = accept self-signed certificates
     //   }
-    // }
+    // },
   }
 }

@@ -6,5 +6,11 @@ module.exports = {
   MIN_ETA_FOR_HOURS: 3600,
   MIN_SPEED_FOR_MB: 1048576,
   INFINITE_ETA: 8640000,
-  AUTH_RETRY_DELAY_MS: 100
+  AUTH_RETRY_DELAY_MS: 100,
+  IDLE_POLL_MULTIPLIER: 4,
+  API_AUTH_LOGIN: "/api/v2/auth/login",
+  API_TORRENTS_INFO: "/api/v2/torrents/info",
+  API_TORRENTS_RESUME: "/api/v2/torrents/resume",
+  API_TORRENTS_PAUSE: "/api/v2/torrents/pause",
+  API_TRANSFER_INFO: "/api/v2/transfer/info"
 };

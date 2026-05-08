@@ -11,6 +11,13 @@
   --border-default: rgba(255, 255, 255, 0.1);
   --border-subtle: rgba(255, 255, 255, 0.05);
 
+  /* Glass Tokens */
+  --glass-bg:        rgba(255, 255, 255, 0.06);
+  --glass-bg-strong: rgba(255, 255, 255, 0.10);
+  --glass-border:    rgba(255, 255, 255, 0.18);
+  --glass-shadow:    0 4px 24px rgba(0, 0, 0, 0.35);
+  --glass-blur:      blur(12px);
+
   /* Easing */
   --ease-out: cubic-bezier(0.25, 1, 0.5, 1);
 
@@ -20,18 +27,25 @@
   --anim-slow:   0.4s;
   --anim-scale:  1;
 
-  /* State Colors — R,G,B for use as rgba(var(--color-state-*), alpha) */
-  --color-state-downloading: 76, 175, 80;
-  --color-state-seeding:     33, 150, 243;
-  --color-state-paused:      255, 152, 0;
-  --color-state-error:       244, 67, 54;
-  --color-state-stalled:     158, 158, 158;
+  /* State Colors — pastel-shifted R,G,B for rgba(var(--color-state-*), alpha) */
+  --color-state-downloading: 100, 220, 120;
+  --color-state-seeding:      80, 180, 255;
+  --color-state-paused:      255, 195, 80;
+  --color-state-error:       255, 110, 100;
+  --color-state-stalled:     170, 170, 185;
 }
 
-/* Module Container */
+/* Module Container — frosted panel */
 .mmm-qb {
   font-family: "Roboto Condensed", sans-serif;
   line-height: 1.5;
+  background: var(--glass-bg);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+  border: 1px solid var(--glass-border);
+  border-radius: 12px;
+  padding: 16px;
+  box-shadow: var(--glass-shadow);
 }
 
 /* Header */
@@ -45,6 +59,7 @@
   letter-spacing: -0.02em;
   margin-bottom: 4px;
   color: var(--text-primary);
+  text-shadow: 0 0 20px rgba(255, 255, 255, 0.15);
 }
 
 .qb-header-speed {
@@ -52,14 +67,24 @@
   font-size: 12px;
   font-weight: 400;
   letter-spacing: 0;
-  color: var(--text-muted);
+  color: rgba(255, 255, 255, 0.6);
   margin-bottom: 4px;
 }
 
 .qb-header-separator {
   border: none;
-  border-top: 1px solid rgba(255, 255, 255, 0.15);
+  height: 1px;
+  background: linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.2) 30%, rgba(255,255,255,0.2) 70%, transparent 100%);
   margin: 8px 0;
+}
+
+.qb-ssl-warning {
+  display: block;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  color: rgba(var(--color-state-paused), 1);
+  margin-bottom: 2px;
 }
 
 /* Status Messages */
@@ -99,15 +124,18 @@
 
 .qb-row {
   border-bottom: 1px solid var(--border-default);
-  transition: background-color calc(var(--anim-fast) * var(--anim-scale)) var(--ease-out);
+  transition: background-color calc(var(--anim-fast) * var(--anim-scale)) var(--ease-out),
+              backdrop-filter    calc(var(--anim-fast) * var(--anim-scale)) var(--ease-out);
 }
 
 .qb-row:nth-child(even) {
-  background-color: rgba(255, 255, 255, 0.02);
+  background-color: rgba(255, 255, 255, 0.03);
 }
 
 .qb-row:hover {
-  background-color: rgba(255, 255, 255, 0.08);
+  background-color: var(--glass-bg-strong);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
 }
 
 .qb-row:last-child {
@@ -150,34 +178,41 @@
 .qb-progress-bar-container {
   width: 100%;
   height: 16px;
-  background-color: var(--border-default);
+  background-color: rgba(255, 255, 255, 0.07);
   border-radius: 8px;
-  border: 0.5px solid rgba(255, 255, 255, 0.15);
+  border: 0.5px solid rgba(255, 255, 255, 0.12);
   overflow: hidden;
   position: relative;
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
 }
 
 /* Progress Bar */
 .qb-progress-bar {
   height: 100%;
-  background: linear-gradient(90deg, rgb(var(--color-state-downloading)) 0%, #5CB85C 100%);
+  background: linear-gradient(90deg, rgba(var(--color-state-downloading), 0.85) 0%, rgba(var(--color-state-downloading), 0.6) 100%);
   border-radius: 8px;
   transition: width    calc(var(--anim-medium) * var(--anim-scale)) var(--ease-out),
               background calc(var(--anim-medium) * var(--anim-scale)) var(--ease-out);
 }
 
 .qb-progress-bar.downloading {
-  background: linear-gradient(90deg, rgb(var(--color-state-downloading)) 0%, #5CB85C 100%);
+  background: linear-gradient(90deg, rgba(var(--color-state-downloading), 0.9) 0%, rgba(var(--color-state-downloading), 0.55) 100%);
+  animation: qb-shimmer calc(2s * var(--anim-scale)) ease-in-out infinite;
 }
 
 .qb-progress-bar.seeding,
 .qb-progress-bar.uploading {
-  background: linear-gradient(90deg, rgb(var(--color-state-seeding)) 0%, #42A5F5 100%);
+  background: linear-gradient(90deg, rgba(var(--color-state-seeding), 0.9) 0%, rgba(var(--color-state-seeding), 0.55) 100%);
 }
 
 .qb-progress-bar.stalled,
 .qb-progress-bar.paused {
-  background: linear-gradient(90deg, #757575 0%, rgb(var(--color-state-stalled)) 100%);
+  background: linear-gradient(90deg, rgba(var(--color-state-stalled), 0.6) 0%, rgba(var(--color-state-stalled), 0.35) 100%);
+}
+
+.qb-progress-bar.error {
+  background: linear-gradient(90deg, rgba(var(--color-state-error), 0.9) 0%, rgba(var(--color-state-error), 0.55) 100%);
 }
 
 .qb-progress-bar.pulse {
@@ -206,7 +241,7 @@
   text-align: center;
 }
 
-/* Status Badge */
+/* Status Badge — glass pill with state glow */
 .qb-status-badge {
   display: inline-block;
   padding: 4px 8px;
@@ -215,17 +250,21 @@
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.05em;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
   transition: background-color calc(var(--anim-slow) * var(--anim-scale)) var(--ease-out),
               border-color      calc(var(--anim-slow) * var(--anim-scale)) var(--ease-out),
-              color              calc(var(--anim-slow) * var(--anim-scale)) var(--ease-out);
+              color              calc(var(--anim-slow) * var(--anim-scale)) var(--ease-out),
+              box-shadow         calc(var(--anim-slow) * var(--anim-scale)) var(--ease-out);
 }
 
 .status-downloading,
 .status-forcedDL,
 .status-metaDL {
-  background-color: rgba(var(--color-state-downloading), 0.3);
-  color: #81C784;
-  border: 1px solid rgb(var(--color-state-downloading));
+  background-color: rgba(var(--color-state-downloading), 0.18);
+  color: #a8f0b4;
+  border: 1px solid rgba(var(--color-state-downloading), 0.6);
+  box-shadow: 0 0 8px rgba(var(--color-state-downloading), 0.35);
 }
 
 .status-uploading,
@@ -233,22 +272,25 @@
 .status-stalledUP,
 .status-queuedUP,
 .status-pausedUP {
-  background-color: rgba(var(--color-state-seeding), 0.3);
-  color: #64B5F6;
-  border: 1px solid rgb(var(--color-state-seeding));
+  background-color: rgba(var(--color-state-seeding), 0.18);
+  color: #a0d8ff;
+  border: 1px solid rgba(var(--color-state-seeding), 0.6);
+  box-shadow: 0 0 8px rgba(var(--color-state-seeding), 0.35);
 }
 
 .status-error,
 .status-missingFiles {
-  background-color: rgba(var(--color-state-error), 0.3);
-  color: #E57373;
-  border: 1px solid rgb(var(--color-state-error));
+  background-color: rgba(var(--color-state-error), 0.18);
+  color: #ffb3ad;
+  border: 1px solid rgba(var(--color-state-error), 0.6);
+  box-shadow: 0 0 8px rgba(var(--color-state-error), 0.35);
 }
 
 .status-pausedDL {
-  background-color: rgba(var(--color-state-paused), 0.3);
-  color: #FFB74D;
-  border: 1px solid rgb(var(--color-state-paused));
+  background-color: rgba(var(--color-state-paused), 0.18);
+  color: #ffe0a0;
+  border: 1px solid rgba(var(--color-state-paused), 0.6);
+  box-shadow: 0 0 8px rgba(var(--color-state-paused), 0.35);
 }
 
 .status-stalledDL,
@@ -256,16 +298,17 @@
 .status-checkingDL,
 .status-checkingUP,
 .status-allocating {
-  background-color: rgba(var(--color-state-stalled), 0.3);
-  color: #BDBDBD;
-  border: 1px solid rgb(var(--color-state-stalled));
+  background-color: rgba(var(--color-state-stalled), 0.18);
+  color: #d0d0dc;
+  border: 1px solid rgba(var(--color-state-stalled), 0.6);
+  box-shadow: 0 0 8px rgba(var(--color-state-stalled), 0.2);
 }
 
 /* Row Tints — requires .qb-tint on wrapper, set via display.colors.rowTint */
 .mmm-qb.qb-tint .qb-row.state-downloading,
 .mmm-qb.qb-tint .qb-row.state-forcedDL,
 .mmm-qb.qb-tint .qb-row.state-metaDL {
-  background-color: rgba(var(--color-state-downloading), 0.08);
+  background-color: rgba(var(--color-state-downloading), 0.10);
 }
 
 .mmm-qb.qb-tint .qb-row.state-uploading,
@@ -273,22 +316,21 @@
 .mmm-qb.qb-tint .qb-row.state-stalledUP,
 .mmm-qb.qb-tint .qb-row.state-queuedUP,
 .mmm-qb.qb-tint .qb-row.state-pausedUP {
-  background-color: rgba(var(--color-state-seeding), 0.08);
+  background-color: rgba(var(--color-state-seeding), 0.10);
 }
 
 .mmm-qb.qb-tint .qb-row.state-pausedDL {
-  background-color: rgba(var(--color-state-paused), 0.08);
+  background-color: rgba(var(--color-state-paused), 0.10);
 }
 
 .mmm-qb.qb-tint .qb-row.state-error,
 .mmm-qb.qb-tint .qb-row.state-missingFiles {
-  background-color: rgba(var(--color-state-error), 0.08);
+  background-color: rgba(var(--color-state-error), 0.10);
 }
 
-/* Actions */
+/* Actions — glass button */
 .qb-actions-cell {
   display: flex;
-  gap: 8px;
   justify-content: center;
   align-items: center;
 }
@@ -299,24 +341,67 @@
   justify-content: center;
   width: 28px;
   height: 28px;
-  background-color: var(--border-default);
-  border: 1px solid var(--border-strong);
-  border-radius: 4px;
+  background-color: var(--glass-bg);
+  border: 1px solid var(--glass-border);
+  border-radius: 8px;
   cursor: pointer;
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
   transition: all calc(var(--anim-fast) * var(--anim-scale)) var(--ease-out);
   font-size: 14px;
   user-select: none;
 }
 
 .qb-action:hover {
-  background-color: var(--border-strong);
-  border-color: rgba(255, 255, 255, 0.4);
+  background-color: var(--glass-bg-strong);
+  border-color: rgba(255, 255, 255, 0.35);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
   transform: scale(1.05);
 }
 
 .qb-action:active {
   transform: scale(0.95);
   transition-duration: calc(0.05s * var(--anim-scale));
+}
+
+.qb-action.action-play {
+  border-color: rgba(var(--color-state-downloading), 0.5);
+  color: rgba(var(--color-state-downloading), 1);
+  box-shadow: 0 0 6px rgba(var(--color-state-downloading), 0.2);
+}
+
+.qb-action.action-pause {
+  border-color: rgba(var(--color-state-paused), 0.4);
+  color: rgba(var(--color-state-paused), 0.9);
+}
+
+/* Header Details Panel */
+.qb-header-details {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 6px 16px;
+  margin-top: 8px;
+}
+
+.qb-header-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.qb-stat-label {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.qb-stat-value {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
 }
 
 /* Compact Mode */
@@ -350,6 +435,14 @@
   font-size: 12px;
 }
 
+.mmm-qb.compact .qb-stat-label {
+  font-size: 9px;
+}
+
+.mmm-qb.compact .qb-stat-value {
+  font-size: 11px;
+}
+
 @keyframes qb-anim-pulse {
   0%, 100% {
     opacity: 1;
@@ -358,6 +451,19 @@
   50% {
     opacity: 0.7;
     transform: scale(0.98);
+  }
+}
+
+/* Shimmer — applied to active downloading bars only */
+@keyframes qb-shimmer {
+  0% {
+    filter: brightness(1);
+  }
+  50% {
+    filter: brightness(1.25);
+  }
+  100% {
+    filter: brightness(1);
   }
 }
 
