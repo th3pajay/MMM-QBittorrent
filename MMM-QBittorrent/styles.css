@@ -13,6 +13,19 @@
 
   /* Easing */
   --ease-out: cubic-bezier(0.25, 1, 0.5, 1);
+
+  /* Timing — multiply by --anim-scale to kill all motion */
+  --anim-fast:   0.15s;
+  --anim-medium: 0.25s;
+  --anim-slow:   0.4s;
+  --anim-scale:  1;
+
+  /* State Colors — R,G,B for use as rgba(var(--color-state-*), alpha) */
+  --color-state-downloading: 76, 175, 80;
+  --color-state-seeding:     33, 150, 243;
+  --color-state-paused:      255, 152, 0;
+  --color-state-error:       244, 67, 54;
+  --color-state-stalled:     158, 158, 158;
 }
 
 /* Module Container */
@@ -30,14 +43,32 @@
   font-size: 18px;
   font-weight: 600;
   letter-spacing: -0.02em;
-  margin-bottom: 8px;
+  margin-bottom: 4px;
   color: var(--text-primary);
+}
+
+.qb-header-speed {
+  display: block;
+  font-size: 12px;
+  font-weight: 400;
+  letter-spacing: 0;
+  color: var(--text-muted);
+  margin-bottom: 4px;
 }
 
 .qb-header-separator {
   border: none;
   border-top: 1px solid rgba(255, 255, 255, 0.15);
   margin: 8px 0;
+}
+
+.qb-ssl-warning {
+  display: block;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  color: rgba(var(--color-state-paused), 1);
+  margin-bottom: 2px;
 }
 
 /* Status Messages */
@@ -77,7 +108,7 @@
 
 .qb-row {
   border-bottom: 1px solid var(--border-default);
-  transition: background-color 0.15s var(--ease-out);
+  transition: background-color calc(var(--anim-fast) * var(--anim-scale)) var(--ease-out);
 }
 
 .qb-row:nth-child(even) {
@@ -138,38 +169,32 @@
 /* Progress Bar */
 .qb-progress-bar {
   height: 100%;
-  background: linear-gradient(90deg, #4CAF50 0%, #5CB85C 100%);
+  background: linear-gradient(90deg, rgb(var(--color-state-downloading)) 0%, #5CB85C 100%);
   border-radius: 8px;
-  transition: width 0.25s var(--ease-out), background 0.25s var(--ease-out);
+  transition: width    calc(var(--anim-medium) * var(--anim-scale)) var(--ease-out),
+              background calc(var(--anim-medium) * var(--anim-scale)) var(--ease-out);
 }
 
 .qb-progress-bar.downloading {
-  background: linear-gradient(90deg, #4CAF50 0%, #5CB85C 100%);
+  background: linear-gradient(90deg, rgb(var(--color-state-downloading)) 0%, #5CB85C 100%);
 }
 
 .qb-progress-bar.seeding,
 .qb-progress-bar.uploading {
-  background: linear-gradient(90deg, #2196F3 0%, #42A5F5 100%);
+  background: linear-gradient(90deg, rgb(var(--color-state-seeding)) 0%, #42A5F5 100%);
 }
 
 .qb-progress-bar.stalled,
 .qb-progress-bar.paused {
-  background: linear-gradient(90deg, #757575 0%, #9E9E9E 100%);
+  background: linear-gradient(90deg, #757575 0%, rgb(var(--color-state-stalled)) 100%);
+}
+
+.qb-progress-bar.error {
+  background: linear-gradient(90deg, rgb(var(--color-state-error)) 0%, #E57373 100%);
 }
 
 .qb-progress-bar.pulse {
-  animation: pulse 1s ease-out;
-}
-
-@keyframes pulse {
-  0%, 100% {
-    opacity: 1;
-    transform: scale(1);
-  }
-  50% {
-    opacity: 0.7;
-    transform: scale(0.98);
-  }
+  animation: qb-anim-pulse calc(1s * var(--anim-scale)) ease-out;
 }
 
 /* Progress Text */
@@ -203,52 +228,74 @@
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.05em;
+  transition: background-color calc(var(--anim-slow) * var(--anim-scale)) var(--ease-out),
+              border-color      calc(var(--anim-slow) * var(--anim-scale)) var(--ease-out),
+              color              calc(var(--anim-slow) * var(--anim-scale)) var(--ease-out);
 }
 
-/* Status Colors - Green for downloading */
 .status-downloading,
 .status-forcedDL,
 .status-metaDL {
-  background-color: rgba(76, 175, 80, 0.3);
+  background-color: rgba(var(--color-state-downloading), 0.3);
   color: #81C784;
-  border: 1px solid #4CAF50;
+  border: 1px solid rgb(var(--color-state-downloading));
 }
 
-/* Status Colors - Blue for uploading/seeding */
 .status-uploading,
 .status-forcedUP,
 .status-stalledUP,
 .status-queuedUP,
 .status-pausedUP {
-  background-color: rgba(33, 150, 243, 0.3);
+  background-color: rgba(var(--color-state-seeding), 0.3);
   color: #64B5F6;
-  border: 1px solid #2196F3;
+  border: 1px solid rgb(var(--color-state-seeding));
 }
 
-/* Status Colors - Red for errors */
 .status-error,
 .status-missingFiles {
-  background-color: rgba(244, 67, 54, 0.3);
+  background-color: rgba(var(--color-state-error), 0.3);
   color: #E57373;
-  border: 1px solid #F44336;
+  border: 1px solid rgb(var(--color-state-error));
 }
 
-/* Status Colors - Orange for paused downloads */
 .status-pausedDL {
-  background-color: rgba(255, 152, 0, 0.3);
+  background-color: rgba(var(--color-state-paused), 0.3);
   color: #FFB74D;
-  border: 1px solid #FF9800;
+  border: 1px solid rgb(var(--color-state-paused));
 }
 
-/* Status Colors - Gray for stalled/queued/checking */
 .status-stalledDL,
 .status-queuedDL,
 .status-checkingDL,
 .status-checkingUP,
 .status-allocating {
-  background-color: rgba(158, 158, 158, 0.3);
+  background-color: rgba(var(--color-state-stalled), 0.3);
   color: #BDBDBD;
-  border: 1px solid #9E9E9E;
+  border: 1px solid rgb(var(--color-state-stalled));
+}
+
+/* Row Tints — requires .qb-tint on wrapper, set via display.colors.rowTint */
+.mmm-qb.qb-tint .qb-row.state-downloading,
+.mmm-qb.qb-tint .qb-row.state-forcedDL,
+.mmm-qb.qb-tint .qb-row.state-metaDL {
+  background-color: rgba(var(--color-state-downloading), 0.08);
+}
+
+.mmm-qb.qb-tint .qb-row.state-uploading,
+.mmm-qb.qb-tint .qb-row.state-forcedUP,
+.mmm-qb.qb-tint .qb-row.state-stalledUP,
+.mmm-qb.qb-tint .qb-row.state-queuedUP,
+.mmm-qb.qb-tint .qb-row.state-pausedUP {
+  background-color: rgba(var(--color-state-seeding), 0.08);
+}
+
+.mmm-qb.qb-tint .qb-row.state-pausedDL {
+  background-color: rgba(var(--color-state-paused), 0.08);
+}
+
+.mmm-qb.qb-tint .qb-row.state-error,
+.mmm-qb.qb-tint .qb-row.state-missingFiles {
+  background-color: rgba(var(--color-state-error), 0.08);
 }
 
 /* Actions */
@@ -269,7 +316,7 @@
   border: 1px solid var(--border-strong);
   border-radius: 4px;
   cursor: pointer;
-  transition: all 0.15s var(--ease-out);
+  transition: all calc(var(--anim-fast) * var(--anim-scale)) var(--ease-out);
   font-size: 14px;
   user-select: none;
 }
@@ -282,7 +329,7 @@
 
 .qb-action:active {
   transform: scale(0.95);
-  transition-duration: 0.05s;
+  transition-duration: calc(0.05s * var(--anim-scale));
 }
 
 /* Compact Mode */
@@ -314,4 +361,19 @@
   width: 24px;
   height: 24px;
   font-size: 12px;
+}
+
+@keyframes qb-anim-pulse {
+  0%, 100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.7;
+    transform: scale(0.98);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root { --anim-scale: 0; }
 }
