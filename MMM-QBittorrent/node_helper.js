@@ -32,6 +32,7 @@ module.exports = NodeHelper.create({
     this.cachedTlsOptions = null
     this.currentPollInterval = null
     this.isPolling = false
+    this.pollGeneration = 0
     this.actionQueue = []
     this.actionTimer = null
     this.log("Helper started")
@@ -73,14 +74,13 @@ module.exports = NodeHelper.create({
 
   /** @param {Object} config @returns {NormalizedHelperConfig} */
   normalizeConfig(config) {
-    // Backward compat
     return {
       connection: {
         host: config.connection?.host ?? config.host ?? "",
         username: config.connection?.username ?? config.username ?? "",
         password: config.connection?.password ?? config.password ?? "",
         tls: {
-          rejectUnauthorized: config.connection?.tls?.rejectUnauthorized ?? true,
+          rejectUnauthorized: config.connection?.tls?.rejectUnauthorized ?? config.rejectUnauthorized ?? true,
           ca: config.connection?.tls?.ca ?? null,
           cert: config.connection?.tls?.cert ?? null,
           key: config.connection?.tls?.key ?? null,
@@ -90,10 +90,10 @@ module.exports = NodeHelper.create({
         }
       },
       polling: {
-        updateInterval: config.polling?.updateInterval ?? config.updateInterval ?? 5000,
-        pollTimeout: config.polling?.pollTimeout ?? 2000,
-        maxConsecutiveFailures: config.polling?.maxConsecutiveFailures ?? 3,
-        pauseOnRepeatedFailures: config.polling?.pauseOnRepeatedFailures ?? false,
+        updateInterval:          config.polling?.updateInterval          ?? config.updateInterval          ?? 5000,
+        pollTimeout:             config.polling?.pollTimeout             ?? config.pollTimeout             ?? 2000,
+        maxConsecutiveFailures:  config.polling?.maxConsecutiveFailures  ?? config.maxConsecutiveFailures  ?? 3,
+        pauseOnRepeatedFailures: config.polling?.pauseOnRepeatedFailures ?? config.pauseOnRepeatedFailures ?? false,
       },
       display: {
         maxItems: config.display?.maxItems ?? config.maxItems ?? 5,
@@ -168,6 +168,7 @@ module.exports = NodeHelper.create({
               this.log(`WARNING: Private key file ${resolved} has overly permissive permissions (${mode.toString(8)}). Consider: chmod 600 ${resolved}`);
             }
           } catch (e) {
+            this.log(`Key permissions check failed: ${e.message}`);
           }
         }
       }
@@ -193,7 +194,6 @@ module.exports = NodeHelper.create({
 
   /** @returns {Object} */
   loadTlsOptions() {
-    // Cache options
     if (this.cachedTlsOptions) {
       return this.cachedTlsOptions;
     }
@@ -265,7 +265,6 @@ module.exports = NodeHelper.create({
               get: (name) => {
                 const key = name.toLowerCase();
                 const value = res.headers[key];
-                // Join multiple cookies
                 if (key === 'set-cookie' && Array.isArray(value)) {
                   return value.join('; ');
                 }
@@ -309,43 +308,43 @@ module.exports = NodeHelper.create({
     this.log("Authenticating...")
 
     try {
-        const res = await this.makeHttpRequest({
-            url: `${host}/api/v2/auth/login`,
-            method: "POST",
-            headers: { "Content-Type": "application/x-www-form-urlencoded" },
-            body: `username=${encodeURIComponent(username)}&password=${encodeURIComponent(password)}`,
-            timeout: 5000
-        })
+      const res = await this.makeHttpRequest({
+        url: `${host}${CONSTANTS.API_AUTH_LOGIN}`,
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: `username=${encodeURIComponent(username)}&password=${encodeURIComponent(password)}`,
+        timeout: 5000
+      })
 
-        const responseText = await res.text()
-        this.log(`Auth response status: ${res.status}`)
+      const responseText = await res.text()
+      this.log(`Auth response status: ${res.status}`)
 
-        if (!res.ok) {
-            this.log(`Auth failed with HTTP status ${res.status}`)
-            return false
-        }
-
-        if (responseText !== "Ok.") {
-            this.log(`Auth failed: qBittorrent returned "${responseText}"`)
-            this.log("Verify username and password are correct")
-            return false
-        }
-
-        const cookies = res.headers.get("set-cookie")
-
-        if (!cookies) {
-            this.log("Auth failed: No session cookie received")
-            return false
-        }
-
-        this.authCookie = cookies
-        this.log("Authenticated successfully. Session cookie received.")
-        return true
-    } catch (e) {
-        this.log(`Auth error: ${e.message}`)
+      if (!res.ok) {
+        this.log(`Auth failed with HTTP status ${res.status}`)
         return false
+      }
+
+      if (responseText !== "Ok.") {
+        this.log(`Auth failed: qBittorrent returned "${responseText}"`)
+        this.log("Verify username and password are correct")
+        return false
+      }
+
+      const cookies = res.headers.get("set-cookie")
+
+      if (!cookies) {
+        this.log("Auth failed: No session cookie received")
+        return false
+      }
+
+      this.authCookie = cookies
+      this.log("Authenticated successfully. Session cookie received.")
+      return true
+    } catch (e) {
+      this.log(`Auth error: ${e.message}`)
+      return false
     }
-},
+  },
 
   startPolling() {
     this.log("Starting polling...")
@@ -384,21 +383,31 @@ module.exports = NodeHelper.create({
 
   /** @returns {Promise<void>} */
   async pollTorrents() {
-    // Prevent overlaps
     if (this.isPolling) return;
     this.isPolling = true;
+    const generation = this.pollGeneration;
 
     try {
       this.log("Polling torrents...")
 
       const data = await this.fetchTorrentData()
+
+      if (this.pollGeneration !== generation) {
+        this.log("Poll superseded by re-initialization, discarding results")
+        return
+      }
+
       const baseInterval = this.config.polling?.updateInterval || CONSTANTS.DEFAULT_UPDATE_INTERVAL_MS
 
       if (data === null) {
         this.consecutiveFailures++
         this.log(`Poll failed. Consecutive failures: ${this.consecutiveFailures}`)
 
-        // Exponential backoff
+        if (this.consecutiveFailures >= 2 && this.authCookie) {
+          this.log("Clearing auth cookie after repeated failures to force re-authentication")
+          this.authCookie = null
+        }
+
         const newInterval = Math.min(
           baseInterval * Math.pow(2, this.consecutiveFailures - 1),
           CONSTANTS.MAX_BACKOFF_MS
@@ -410,21 +419,18 @@ module.exports = NodeHelper.create({
         }
 
         const maxFailures = this.config.polling?.maxConsecutiveFailures || 3
-        if (this.consecutiveFailures >= 1) {
-          if (this.consecutiveFailures >= maxFailures && this.config.polling?.pauseOnRepeatedFailures) {
-            this.setState(this.STATES.PAUSED)
-            this.log("Pausing polling due to repeated failures")
-          } else {
-            this.setState(this.STATES.ERROR)
-          }
-          this.sendSocketNotification("QB_ERROR", {
-            message: "Failed to connect to qBittorrent",
-            failures: this.consecutiveFailures,
-            willRetry: this.consecutiveFailures < maxFailures
-          })
+        if (this.consecutiveFailures >= maxFailures && this.config.polling?.pauseOnRepeatedFailures) {
+          this.setState(this.STATES.PAUSED)
+          this.log("Pausing polling due to repeated failures")
+        } else {
+          this.setState(this.STATES.ERROR)
         }
+        this.sendSocketNotification("QB_ERROR", {
+          message: "Failed to connect to qBittorrent",
+          failures: this.consecutiveFailures,
+          willRetry: this.consecutiveFailures < maxFailures
+        })
       } else {
-        // Reset backoff
         if (this.consecutiveFailures > 0) {
           this.log("Polling recovered after failures")
           if (this.currentPollInterval !== baseInterval) {
@@ -436,14 +442,12 @@ module.exports = NodeHelper.create({
 
         this.sendSocketNotification("QB_UPDATE", data)
 
-        // Adaptive polling
         const hasActiveTransfers = data.some(t =>
           ['downloading', 'forcedDL', 'metaDL'].includes(t.state)
         );
-        const idleMultiplier = 4;
         const targetInterval = hasActiveTransfers
           ? baseInterval
-          : baseInterval * idleMultiplier;
+          : baseInterval * CONSTANTS.IDLE_POLL_MULTIPLIER;
 
         if (targetInterval !== this.currentPollInterval) {
           this.log(`Poll interval: ${this.currentPollInterval}ms → ${targetInterval}ms (${hasActiveTransfers ? 'active' : 'idle'})`);
@@ -457,7 +461,6 @@ module.exports = NodeHelper.create({
 
   /** @returns {Promise<Array|null>} */
   async fetchTorrentData() {
-    // Wait for auth
     let waitCount = 0
     const maxWaitCount = 50
     while (this.state === this.STATES.AUTHENTICATING && waitCount < maxWaitCount) {
@@ -483,12 +486,11 @@ module.exports = NodeHelper.create({
     }
 
     const host = this.config.connection.host
-    const endpoint = "/api/v2/torrents/info"
     const timeout = this.config.polling.pollTimeout
 
     try {
       const res = await this.makeHttpRequest({
-        url: `${host}${endpoint}`,
+        url: `${host}${CONSTANTS.API_TORRENTS_INFO}`,
         method: "GET",
         headers: { Cookie: this.authCookie },
         timeout: timeout
@@ -497,7 +499,6 @@ module.exports = NodeHelper.create({
       if (!res.ok) {
         this.log(`Fetch failed with status ${res.status}`)
 
-        // Re-auth on 401/403
         if (res.status === 403 || res.status === 401) {
           this.log("Auth may have expired, clearing cookie")
           this.authCookie = null
@@ -507,6 +508,10 @@ module.exports = NodeHelper.create({
       }
 
       const data = await res.json()
+      if (!Array.isArray(data)) {
+        this.log(`Unexpected API response type: ${typeof data}`)
+        return null
+      }
       this.log(`Fetched ${data.length} torrents`)
       return data
 
@@ -520,9 +525,8 @@ module.exports = NodeHelper.create({
     }
   },
 
-  /** @param {{hash: string, action: string}} payload @returns {Promise<void>} */
-  async handleAction(payload) {
-    // Batch actions
+  /** @param {{hash: string, action: string}} payload */
+  handleAction(payload) {
     this.actionQueue.push(payload);
     if (!this.actionTimer) {
       this.actionTimer = setTimeout(() => this.flushActions(), 100);
@@ -539,7 +543,6 @@ module.exports = NodeHelper.create({
 
     this.log(`Flushing ${queue.length} queued action(s)`);
 
-    // Group and dedupe
     const grouped = {};
     for (const { hash, action } of queue) {
       const normalized = (action === 'start') ? 'resume' : action;
@@ -554,10 +557,10 @@ module.exports = NodeHelper.create({
 
       switch (action) {
         case "resume":
-          endpoint = "/api/v2/torrents/resume";
+          endpoint = CONSTANTS.API_TORRENTS_RESUME;
           break;
         case "pause":
-          endpoint = "/api/v2/torrents/pause";
+          endpoint = CONSTANTS.API_TORRENTS_PAUSE;
           break;
         default:
           this.log(`Unknown action: ${action}`);
@@ -581,26 +584,33 @@ module.exports = NodeHelper.create({
           this.log(`Batch action ${action} successful`);
         } else {
           this.log(`Batch action ${action} failed with status ${res.status}`);
+          if (res.status === 401 || res.status === 403) {
+            this.log("Auth may have expired, clearing cookie");
+            this.authCookie = null;
+          }
         }
       } catch (e) {
         this.log(`Batch action error: ${e.message}`);
       }
     }
 
-    // Reset interval
     const baseInterval = this.config.polling?.updateInterval || CONSTANTS.DEFAULT_UPDATE_INTERVAL_MS;
     if (this.currentPollInterval !== baseInterval) {
       this.restartPollingWithInterval(baseInterval);
     }
 
-    // Poll immediately
     await this.pollTorrents();
+
+    if (this.actionQueue.length > 0 && !this.actionTimer) {
+      this.actionTimer = setTimeout(() => this.flushActions(), 100);
+    }
   },
 
   /** @param {string} notification @param {any} payload */
   socketNotificationReceived(notification, payload) {
     if (notification === "QB_INIT") {
       this.log("Received QB_INIT with config")
+      this.pollGeneration++
       this.config = this.normalizeConfig(payload)
       this.cachedTlsOptions = null
 
@@ -613,6 +623,10 @@ module.exports = NodeHelper.create({
       }
 
       this.startPolling()
+
+      if (this.config.connection.tls.rejectUnauthorized === false) {
+        this.sendSocketNotification("QB_WARN", { message: "SSL certificate validation disabled" })
+      }
     }
     else if (notification === "QB_ACTION") {
       this.handleAction(payload)
