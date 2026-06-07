@@ -390,7 +390,7 @@ module.exports = NodeHelper.create({
     try {
       this.log("Polling torrents...")
 
-      const data = await this.fetchTorrentData()
+      const data = await this.fetchData()
 
       if (this.pollGeneration !== generation) {
         this.log("Poll superseded by re-initialization, discarding results")
@@ -440,9 +440,9 @@ module.exports = NodeHelper.create({
         this.consecutiveFailures = 0
         this.setState(this.STATES.POLLING)
 
-        this.sendSocketNotification("QB_UPDATE", data)
+        this.sendSocketNotification("QB_UPDATE", { torrents: data.torrents, transferInfo: data.transferInfo })
 
-        const hasActiveTransfers = data.some(t =>
+        const hasActiveTransfers = data.torrents.some(t =>
           ['downloading', 'forcedDL', 'metaDL'].includes(t.state)
         );
         const targetInterval = hasActiveTransfers
@@ -459,8 +459,8 @@ module.exports = NodeHelper.create({
     }
   },
 
-  /** @returns {Promise<Array|null>} */
-  async fetchTorrentData() {
+  /** @returns {Promise<{torrents: Array, transferInfo: Object|null}|null>} */
+  async fetchData() {
     let waitCount = 0
     const maxWaitCount = 50
     while (this.state === this.STATES.AUTHENTICATING && waitCount < maxWaitCount) {
@@ -489,17 +489,25 @@ module.exports = NodeHelper.create({
     const timeout = this.config.polling.pollTimeout
 
     try {
-      const res = await this.makeHttpRequest({
-        url: `${host}${CONSTANTS.API_TORRENTS_INFO}`,
-        method: "GET",
-        headers: { Cookie: this.authCookie },
-        timeout: timeout
-      })
+      const [torrentsRes, transferRes] = await Promise.all([
+        this.makeHttpRequest({
+          url: `${host}${CONSTANTS.API_TORRENTS_INFO}`,
+          method: "GET",
+          headers: { Cookie: this.authCookie },
+          timeout: timeout
+        }),
+        this.makeHttpRequest({
+          url: `${host}${CONSTANTS.API_TRANSFER_INFO}`,
+          method: "GET",
+          headers: { Cookie: this.authCookie },
+          timeout: timeout
+        }).catch(e => { this.log(`Transfer info fetch error: ${e.message}`); return null })
+      ])
 
-      if (!res.ok) {
-        this.log(`Fetch failed with status ${res.status}`)
+      if (!torrentsRes.ok) {
+        this.log(`Fetch failed with status ${torrentsRes.status}`)
 
-        if (res.status === 403 || res.status === 401) {
+        if (torrentsRes.status === 403 || torrentsRes.status === 401) {
           this.log("Auth may have expired, clearing cookie")
           this.authCookie = null
         }
@@ -507,13 +515,23 @@ module.exports = NodeHelper.create({
         return null
       }
 
-      const data = await res.json()
-      if (!Array.isArray(data)) {
-        this.log(`Unexpected API response type: ${typeof data}`)
+      const torrents = await torrentsRes.json()
+      if (!Array.isArray(torrents)) {
+        this.log(`Unexpected API response type: ${typeof torrents}`)
         return null
       }
-      this.log(`Fetched ${data.length} torrents`)
-      return data
+      this.log(`Fetched ${torrents.length} torrents`)
+
+      let transferInfo = null
+      if (transferRes && transferRes.ok) {
+        try {
+          transferInfo = await transferRes.json()
+        } catch (e) {
+          this.log(`Transfer info parse error: ${e.message}`)
+        }
+      }
+
+      return { torrents, transferInfo }
 
     } catch (e) {
       if (e.message === 'Request timeout') {
