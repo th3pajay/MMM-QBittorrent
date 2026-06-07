@@ -11,5 +11,6 @@ module.exports = {
   API_AUTH_LOGIN: "/api/v2/auth/login",
   API_TORRENTS_INFO: "/api/v2/torrents/info",
   API_TORRENTS_RESUME: "/api/v2/torrents/resume",
-  API_TORRENTS_PAUSE: "/api/v2/torrents/pause"
+  API_TORRENTS_PAUSE: "/api/v2/torrents/pause",
+  API_TRANSFER_INFO: "/api/v2/transfer/info"
 };
