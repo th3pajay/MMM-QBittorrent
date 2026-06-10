@@ -5,7 +5,7 @@ MagicMirror module for monitoring and controlling qBittorrent.
 ![MagicMirror](https://img.shields.io/badge/MagicMirror-v2.33.0-blue)
 ![Torrent](https://img.shields.io/badge/QBittorrent-green)
 ![Module](https://img.shields.io/badge/Module-Display-orange)
-![Version](https://img.shields.io/badge/Version-1.2.12-yellow)
+![Version](https://img.shields.io/badge/Version-1.2.15-yellow)
 ![License](https://img.shields.io/badge/License-MIT-lightgrey)
 
 <p align="center">
@@ -22,15 +22,11 @@ MagicMirror module for monitoring and controlling qBittorrent.
 - Visual progress bars
 - Full HTTPS/TLS support including mutual TLS authentication
 
-## Installation (Nested structure)
+## Installation
 
 ```bash
 cd ~/MagicMirror/modules
-git clone https://github.com/th3pajay/MMM-QBittorrent.git temp_qb
-mv temp_qb/MMM-QBittorrent .
-rm -rf temp_qb
-cd MMM-QBittorrent
-# No dependencies — nothing to install
+git clone https://github.com/th3pajay/MMM-QBittorrent.git
 ```
 
 ## Configuration
@@ -82,7 +78,7 @@ Add to `~/MagicMirror/config/config.js`:
 		  }
 ```
 
-See `MMM-QBittorrent/config.js.example` for complete configuration template.
+See `config.js.example` for complete configuration template.
 
 ## Security
 
