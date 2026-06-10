@@ -671,6 +671,9 @@ Module.register("MMM-QBittorrent", {
 
     headerContainer.style.textAlign = align;
 
+    const titleRow = document.createElement("div");
+    titleRow.className = "qb-header-title-row";
+
     const headerText = document.createElement("div");
     headerText.className = "qb-module-header";
     headerText.textContent = "QBittorrent";
@@ -679,11 +682,12 @@ Module.register("MMM-QBittorrent", {
     speedSpan.className = "qb-header-speed";
     speedSpan.textContent = this.formatAggregateSpeed();
 
+    titleRow.appendChild(headerText);
+    titleRow.appendChild(speedSpan);
+    headerContainer.appendChild(titleRow);
+
     const separator = document.createElement("hr");
     separator.className = "qb-header-separator";
-
-    headerContainer.appendChild(headerText);
-    headerContainer.appendChild(speedSpan);
 
     if (this.sslWarning) {
       const warning = document.createElement("span");
@@ -796,7 +800,7 @@ Module.register("MMM-QBittorrent", {
       results.push({ key, label: def.label, value: def.value() });
     }
 
-    return results;
+    return results.slice(0, 9); // 3 cols × 3 rows max
   },
 
   /** @param {TorrentData[]} torrents @param {NormalizedConfig} config @returns {HTMLElement} */

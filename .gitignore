@@ -5,6 +5,4 @@ dist/
 .DS_Store
 .env
 nul
-../.idea/
 *.iml
-.design/
