@@ -7,12 +7,6 @@ const path = require("path")
 
 const CONSTANTS = require("./lib/constants")
 
-/**
- * @typedef {{connection: {host: string, username: string, password: string, tls: TLSConfig}, polling: {updateInterval: number, pollTimeout: number, maxConsecutiveFailures: number, pauseOnRepeatedFailures: boolean}, display: {maxItems: number, viewFilter: string, compact: boolean, scale: number}}} NormalizedHelperConfig
- * @typedef {{rejectUnauthorized?: boolean, ca?: string|string[], cert?: string, key?: string, passphrase?: string, minVersion?: string, maxVersion?: string}} TLSConfig
- * @typedef {{ok: boolean, status: number, headers: {get: Function, raw: Object}, json: Function, text: Function}} HttpResponse
- */
-
 module.exports = NodeHelper.create({
   STATES: {
     IDLE: 'idle',
@@ -39,7 +33,6 @@ module.exports = NodeHelper.create({
   },
 
   stop() {
-    this.log("Stopping helper...")
     if (this.pollingTimer) {
       clearInterval(this.pollingTimer)
       this.pollingTimer = null
@@ -47,7 +40,6 @@ module.exports = NodeHelper.create({
     this.setState(this.STATES.STOPPED)
   },
 
-  /** @param {string} newState @returns {boolean} */
   setState(newState) {
     const validTransitions = {
       [this.STATES.IDLE]: [this.STATES.AUTHENTICATING, this.STATES.POLLING, this.STATES.STOPPED],
@@ -67,12 +59,10 @@ module.exports = NodeHelper.create({
     return false;
   },
 
-  /** @param {string} msg */
   log(msg) {
     console.log(`[MMM-QBittorrent] [QB] ${msg}`)
   },
 
-  /** @param {Object} config @returns {NormalizedHelperConfig} */
   normalizeConfig(config) {
     return {
       connection: {
@@ -104,7 +94,6 @@ module.exports = NodeHelper.create({
     };
   },
 
-  /** @param {NormalizedHelperConfig} config @returns {boolean} */
   validateConfig(config) {
     const errors = [];
 
@@ -184,7 +173,6 @@ module.exports = NodeHelper.create({
     return true;
   },
 
-  /** @param {string} filePath @returns {string} */
   resolveCertPath(filePath) {
     if (path.isAbsolute(filePath)) {
       return filePath;
@@ -192,7 +180,6 @@ module.exports = NodeHelper.create({
     return path.resolve(__dirname, filePath);
   },
 
-  /** @returns {Object} */
   loadTlsOptions() {
     if (this.cachedTlsOptions) {
       return this.cachedTlsOptions;
@@ -231,7 +218,6 @@ module.exports = NodeHelper.create({
     return options;
   },
 
-  /** @param {{url: string, method?: string, headers?: Object, body?: string|null, timeout?: number}} options @returns {Promise<HttpResponse>} */
   makeHttpRequest({ url: requestUrl, method = "GET", headers = {}, body = null, timeout = 5000 }) {
     return new Promise((resolve, reject) => {
       const parsedUrl = new url.URL(requestUrl);
@@ -242,8 +228,8 @@ module.exports = NodeHelper.create({
         hostname: parsedUrl.hostname,
         port: parsedUrl.port,
         path: parsedUrl.pathname + parsedUrl.search,
-        method: method,
-        headers: headers,
+        method,
+        headers,
       };
 
       if (isHttps) {
@@ -299,7 +285,6 @@ module.exports = NodeHelper.create({
     });
   },
 
-  /** @returns {Promise<boolean>} */
   async authenticate() {
     const host = this.config.connection.host
     const username = this.config.connection.username
@@ -346,6 +331,14 @@ module.exports = NodeHelper.create({
     }
   },
 
+  _createPollingInterval(interval) {
+    return setInterval(() => {
+      if (this.state !== this.STATES.PAUSED && this.state !== this.STATES.STOPPED) {
+        this.pollTorrents()
+      }
+    }, interval)
+  },
+
   startPolling() {
     this.log("Starting polling...")
 
@@ -359,29 +352,19 @@ module.exports = NodeHelper.create({
 
     this.pollTorrents()
 
-    this.pollingTimer = setInterval(() => {
-      if (this.state !== this.STATES.PAUSED && this.state !== this.STATES.STOPPED) {
-        this.pollTorrents()
-      }
-    }, this.currentPollInterval)
+    this.pollingTimer = this._createPollingInterval(this.currentPollInterval)
 
     this.log(`Polling started with interval: ${this.currentPollInterval}ms`)
   },
 
-  /** @param {number} newInterval */
   restartPollingWithInterval(newInterval) {
     if (this.pollingTimer) {
       clearInterval(this.pollingTimer)
     }
     this.currentPollInterval = newInterval
-    this.pollingTimer = setInterval(() => {
-      if (this.state !== this.STATES.PAUSED && this.state !== this.STATES.STOPPED) {
-        this.pollTorrents()
-      }
-    }, this.currentPollInterval)
+    this.pollingTimer = this._createPollingInterval(newInterval)
   },
 
-  /** @returns {Promise<void>} */
   async pollTorrents() {
     if (this.isPolling) return;
     this.isPolling = true;
@@ -408,8 +391,9 @@ module.exports = NodeHelper.create({
           this.authCookie = null
         }
 
+        const rawInterval = baseInterval * Math.pow(2, this.consecutiveFailures - 1)
         const newInterval = Math.min(
-          baseInterval * Math.pow(2, this.consecutiveFailures - 1),
+          Math.round(rawInterval * (0.75 + Math.random() * 0.5)),
           CONSTANTS.MAX_BACKOFF_MS
         )
 
@@ -459,7 +443,6 @@ module.exports = NodeHelper.create({
     }
   },
 
-  /** @returns {Promise<{torrents: Array, transferInfo: Object|null}|null>} */
   async fetchData() {
     let waitCount = 0
     const maxWaitCount = 50
@@ -494,13 +477,13 @@ module.exports = NodeHelper.create({
           url: `${host}${CONSTANTS.API_TORRENTS_INFO}`,
           method: "GET",
           headers: { Cookie: this.authCookie },
-          timeout: timeout
+          timeout
         }),
         this.makeHttpRequest({
           url: `${host}${CONSTANTS.API_TRANSFER_INFO}`,
           method: "GET",
           headers: { Cookie: this.authCookie },
-          timeout: timeout
+          timeout
         }).catch(e => { this.log(`Transfer info fetch error: ${e.message}`); return null })
       ])
 
@@ -543,15 +526,13 @@ module.exports = NodeHelper.create({
     }
   },
 
-  /** @param {{hash: string, action: string}} payload */
   handleAction(payload) {
     this.actionQueue.push(payload);
     if (!this.actionTimer) {
-      this.actionTimer = setTimeout(() => this.flushActions(), 100);
+      this.actionTimer = setTimeout(() => this.flushActions(), CONSTANTS.ACTION_BATCH_DELAY_MS);
     }
   },
 
-  /** @returns {Promise<void>} */
   async flushActions() {
     this.actionTimer = null;
     const queue = this.actionQueue;
@@ -620,11 +601,10 @@ module.exports = NodeHelper.create({
     await this.pollTorrents();
 
     if (this.actionQueue.length > 0 && !this.actionTimer) {
-      this.actionTimer = setTimeout(() => this.flushActions(), 100);
+      this.actionTimer = setTimeout(() => this.flushActions(), CONSTANTS.ACTION_BATCH_DELAY_MS);
     }
   },
 
-  /** @param {string} notification @param {any} payload */
   socketNotificationReceived(notification, payload) {
     if (notification === "QB_INIT") {
       this.log("Received QB_INIT with config")
