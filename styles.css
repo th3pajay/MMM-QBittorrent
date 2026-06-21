@@ -1,50 +1,32 @@
-/* CSS Variables */
-:root {
-  /* Text Hierarchy */
+.mmm-qb {
   --qb-text-primary:   rgba(255, 255, 255, 0.95);
   --qb-text-secondary: rgba(255, 255, 255, 0.72);
   --qb-text-muted:     rgba(255, 255, 255, 0.48);
   --qb-text-faint:     rgba(255, 255, 255, 0.28);
-
-  /* Border Hierarchy */
   --qb-border-strong:  rgba(255, 255, 255, 0.22);
   --qb-border-default: rgba(255, 255, 255, 0.10);
   --qb-border-subtle:  rgba(255, 255, 255, 0.06);
-
-  /* Glass Tokens */
   --qb-glass-bg:        rgba(255, 255, 255, 0.05);
   --qb-glass-bg-strong: rgba(255, 255, 255, 0.09);
   --qb-glass-border:    rgba(255, 255, 255, 0.16);
   --qb-glass-shadow:    0 6px 32px rgba(0, 0, 0, 0.45);
   --qb-glass-blur:      blur(14px);
-
-  /* Radii */
   --qb-radius-sm: 5px;
   --qb-radius-md: 9px;
   --qb-radius-lg: 13px;
-
-  /* Accent (blue) — R,G,B for rgba composition */
+  /* R,G,B tuples for rgba() composition */
   --qb-accent: 55, 155, 255;
-
-  /* Easing */
   --qb-ease-out: cubic-bezier(0.25, 1, 0.5, 1);
-
-  /* Timing */
   --qb-anim-fast:   0.12s;
   --qb-anim-medium: 0.22s;
   --qb-anim-slow:   0.38s;
   --qb-anim-scale:  1;
-
-  /* State Colors — R,G,B for rgba(var(--qb-color-state-*), alpha) */
   --qb-color-state-downloading:  80, 210, 115;
   --qb-color-state-seeding:      50, 170, 255;
   --qb-color-state-paused:      255, 185,  60;
   --qb-color-state-error:       255,  80,  75;
   --qb-color-state-stalled:     148, 148, 166;
-}
 
-/* Module Container */
-.mmm-qb {
   font-family: "Roboto Condensed", sans-serif;
   line-height: 1.5;
   background: var(--qb-glass-bg);
@@ -56,14 +38,11 @@
   box-shadow: var(--qb-glass-shadow);
 }
 
-/* ── Header ─────────────────────────────────────────────────── */
-
-.qb-header-container {
+.mmm-qb .qb-header-container {
   margin-bottom: 10px;
 }
 
-/* Title + speed on one line */
-.qb-header-title-row {
+.mmm-qb .qb-header-title-row {
   display: flex;
   justify-content: space-between;
   align-items: baseline;
@@ -71,7 +50,7 @@
   margin-bottom: 2px;
 }
 
-.qb-module-header {
+.mmm-qb .qb-module-header {
   font-size: 17px;
   font-weight: 700;
   letter-spacing: -0.02em;
@@ -80,7 +59,7 @@
   flex-shrink: 0;
 }
 
-.qb-header-speed {
+.mmm-qb .qb-header-speed {
   font-size: 11px;
   font-weight: 500;
   letter-spacing: 0.01em;
@@ -89,7 +68,7 @@
   white-space: nowrap;
 }
 
-.qb-ssl-warning {
+.mmm-qb .qb-ssl-warning {
   display: block;
   font-size: 11px;
   font-weight: 600;
@@ -98,8 +77,7 @@
   margin-top: 2px;
 }
 
-/* Separator — accent tinted */
-.qb-header-separator {
+.mmm-qb .qb-header-separator {
   border: none;
   height: 1px;
   background: linear-gradient(
@@ -112,9 +90,7 @@
   margin: 8px 0 0;
 }
 
-/* ── Header Stat Grid ────────────────────────────────────────── */
-
-.qb-header-details {
+.mmm-qb .qb-header-details {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   grid-template-rows: repeat(3, auto);
@@ -125,7 +101,7 @@
   margin-top: 10px;
 }
 
-.qb-header-stat {
+.mmm-qb .qb-header-stat {
   display: flex;
   flex-direction: column;
   gap: 1px;
@@ -135,23 +111,22 @@
   background: rgba(var(--qb-accent), 0.024);
 }
 
-/* Remove right border on every 3rd cell (last column) */
-.qb-header-stat:nth-child(3n) {
+/* last col: no right border */
+.mmm-qb .qb-header-stat:nth-child(3n) {
   border-right: none;
 }
 
-/* Remove bottom border on last row (rows 7-9 when 9 stats) */
-.qb-header-stat:nth-child(n+7) {
+/* last row: no bottom border */
+.mmm-qb .qb-header-stat:nth-child(n+7) {
   border-bottom: none;
 }
 
-/* When only 6 stats shown (2 rows), last row = items 4-6 */
-.qb-header-stat:nth-child(n+4):last-child,
-.qb-header-stat:nth-child(n+4):nth-last-child(-n+3) {
+.mmm-qb .qb-header-stat:nth-child(n+4):last-child,
+.mmm-qb .qb-header-stat:nth-child(n+4):nth-last-child(-n+3) {
   border-bottom: none;
 }
 
-.qb-stat-label {
+.mmm-qb .qb-stat-label {
   font-size: 9px;
   font-weight: 700;
   letter-spacing: 0.07em;
@@ -159,41 +134,37 @@
   color: var(--qb-text-faint);
 }
 
-.qb-stat-value {
+.mmm-qb .qb-stat-value {
   font-size: 12px;
   font-weight: 600;
   color: var(--qb-text-secondary);
   font-variant-numeric: tabular-nums;
 }
 
-/* ── Status Messages ──────────────────────────────────────────── */
-
-.qb-status-message {
+.mmm-qb .qb-status-message {
   text-align: center;
   padding: 12px;
   color: var(--qb-text-secondary);
 }
 
-.qb-status-details {
+.mmm-qb .qb-status-details {
   text-align: center;
   padding: 8px;
   color: var(--qb-text-muted);
 }
 
-/* ── Table ────────────────────────────────────────────────────── */
-
-.qb-table {
+.mmm-qb .qb-table {
   width: 100%;
   border-collapse: collapse;
   table-layout: auto;
   margin-top: 8px;
 }
 
-.qb-thead {
+.mmm-qb .qb-thead {
   border-bottom: 1px solid var(--qb-border-strong);
 }
 
-.qb-th {
+.mmm-qb .qb-th {
   padding: 6px 10px;
   font-size: 11px;
   font-weight: 700;
@@ -203,59 +174,55 @@
   white-space: nowrap;
 }
 
-.qb-row {
+.mmm-qb .qb-row {
   border-bottom: 1px solid var(--qb-border-subtle);
   transition: background-color calc(var(--qb-anim-fast) * var(--qb-anim-scale)) var(--qb-ease-out);
 }
 
-.qb-row:nth-child(even) {
+.mmm-qb .qb-row:nth-child(even) {
   background-color: rgba(255, 255, 255, 0.025);
 }
 
-.qb-row:hover {
+.mmm-qb .qb-row:hover {
   background-color: var(--qb-glass-bg-strong);
 }
 
-.qb-row:last-child {
+.mmm-qb .qb-row:last-child {
   border-bottom: none;
 }
 
-.qb-td {
+.mmm-qb .qb-td {
   padding: 10px 10px;
   font-size: 13px;
   color: var(--qb-text-primary);
   vertical-align: middle;
 }
 
-/* ── Columns ──────────────────────────────────────────────────── */
-
-.col-name {
+.mmm-qb .col-name {
   max-width: 300px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.col-size,
-.col-dlspeed,
-.col-upspeed,
-.col-ratio {
+.mmm-qb .col-size,
+.mmm-qb .col-dlspeed,
+.mmm-qb .col-upspeed,
+.mmm-qb .col-ratio {
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
 
-/* ── Progress ─────────────────────────────────────────────────── */
-
-.col-progress {
+.mmm-qb .col-progress {
   min-width: 110px;
 }
 
-.qb-progress-cell {
+.mmm-qb .qb-progress-cell {
   position: relative;
   width: 100%;
 }
 
-.qb-progress-bar-container {
+.mmm-qb .qb-progress-bar-container {
   width: 100%;
   height: 14px;
   background-color: rgba(255, 255, 255, 0.07);
@@ -265,38 +232,38 @@
   position: relative;
 }
 
-.qb-progress-bar {
+.mmm-qb .qb-progress-bar {
+  --qb-bar-color: var(--qb-color-state-downloading);
   height: 100%;
-  background: linear-gradient(90deg, rgba(var(--qb-color-state-downloading), 0.88) 0%, rgba(var(--qb-color-state-downloading), 0.58) 100%);
+  background: linear-gradient(90deg, rgba(var(--qb-bar-color), 0.92) 0%, rgba(var(--qb-bar-color), 0.58) 100%);
   border-radius: 4px;
   transition: width    calc(var(--qb-anim-medium) * var(--qb-anim-scale)) var(--qb-ease-out),
               background calc(var(--qb-anim-medium) * var(--qb-anim-scale)) var(--qb-ease-out);
 }
 
-.qb-progress-bar.downloading {
-  background: linear-gradient(90deg, rgba(var(--qb-color-state-downloading), 0.92) 0%, rgba(var(--qb-color-state-downloading), 0.58) 100%);
+.mmm-qb .qb-progress-bar.downloading {
   animation: qb-shimmer calc(2s * var(--qb-anim-scale)) ease-in-out infinite;
 }
 
-.qb-progress-bar.seeding,
-.qb-progress-bar.uploading {
-  background: linear-gradient(90deg, rgba(var(--qb-color-state-seeding), 0.92) 0%, rgba(var(--qb-color-state-seeding), 0.58) 100%);
+.mmm-qb .qb-progress-bar.seeding,
+.mmm-qb .qb-progress-bar.uploading {
+  --qb-bar-color: var(--qb-color-state-seeding);
 }
 
-.qb-progress-bar.stalled,
-.qb-progress-bar.paused {
+.mmm-qb .qb-progress-bar.stalled,
+.mmm-qb .qb-progress-bar.paused {
   background: linear-gradient(90deg, rgba(var(--qb-color-state-stalled), 0.58) 0%, rgba(var(--qb-color-state-stalled), 0.34) 100%);
 }
 
-.qb-progress-bar.error {
-  background: linear-gradient(90deg, rgba(var(--qb-color-state-error), 0.92) 0%, rgba(var(--qb-color-state-error), 0.58) 100%);
+.mmm-qb .qb-progress-bar.error {
+  --qb-bar-color: var(--qb-color-state-error);
 }
 
-.qb-progress-bar.pulse {
+.mmm-qb .qb-progress-bar.pulse {
   animation: qb-anim-pulse calc(1s * var(--qb-anim-scale)) ease-out;
 }
 
-.qb-progress-text {
+.mmm-qb .qb-progress-text {
   position: absolute;
   top: 50%;
   left: 50%;
@@ -311,15 +278,14 @@
   z-index: 1;
 }
 
-.qb-progress-text-only {
+.mmm-qb .qb-progress-text-only {
   font-weight: 600;
   font-variant-numeric: tabular-nums;
   text-align: center;
 }
 
-/* ── Status Badge ─────────────────────────────────────────────── */
-
-.qb-status-badge {
+.mmm-qb .qb-status-badge {
+  --badge-color: var(--qb-color-state-stalled);
   display: inline-block;
   padding: 3px 7px;
   border-radius: var(--qb-radius-sm);
@@ -327,59 +293,41 @@
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.06em;
+  background-color: rgba(var(--badge-color), 0.16);
+  border: 1px solid rgba(var(--badge-color), 0.55);
+  box-shadow: 0 0 7px rgba(var(--badge-color), 0.28);
   transition: background-color calc(var(--qb-anim-slow) * var(--qb-anim-scale)) var(--qb-ease-out),
               border-color      calc(var(--qb-anim-slow) * var(--qb-anim-scale)) var(--qb-ease-out),
               color              calc(var(--qb-anim-slow) * var(--qb-anim-scale)) var(--qb-ease-out),
               box-shadow         calc(var(--qb-anim-slow) * var(--qb-anim-scale)) var(--qb-ease-out);
 }
 
-.status-downloading,
-.status-forcedDL,
-.status-metaDL {
-  background-color: rgba(var(--qb-color-state-downloading), 0.16);
+.mmm-qb .status-downloading, .mmm-qb .status-forcedDL, .mmm-qb .status-metaDL {
+  --badge-color: var(--qb-color-state-downloading);
   color: #78d273;
-  border: 1px solid rgba(var(--qb-color-state-downloading), 0.55);
-  box-shadow: 0 0 7px rgba(var(--qb-color-state-downloading), 0.28);
 }
 
-.status-uploading,
-.status-forcedUP,
-.status-stalledUP,
-.status-queuedUP,
-.status-pausedUP {
-  background-color: rgba(var(--qb-color-state-seeding), 0.16);
+.mmm-qb .status-uploading, .mmm-qb .status-forcedUP, .mmm-qb .status-stalledUP, .mmm-qb .status-queuedUP, .mmm-qb .status-pausedUP {
+  --badge-color: var(--qb-color-state-seeding);
   color: #5aabff;
-  border: 1px solid rgba(var(--qb-color-state-seeding), 0.55);
-  box-shadow: 0 0 7px rgba(var(--qb-color-state-seeding), 0.28);
 }
 
-.status-error,
-.status-missingFiles {
-  background-color: rgba(var(--qb-color-state-error), 0.16);
+.mmm-qb .status-error, .mmm-qb .status-missingFiles {
+  --badge-color: var(--qb-color-state-error);
   color: #ff6b67;
-  border: 1px solid rgba(var(--qb-color-state-error), 0.55);
-  box-shadow: 0 0 7px rgba(var(--qb-color-state-error), 0.28);
 }
 
-.status-pausedDL {
-  background-color: rgba(var(--qb-color-state-paused), 0.16);
+.mmm-qb .status-pausedDL {
+  --badge-color: var(--qb-color-state-paused);
   color: #ffb940;
-  border: 1px solid rgba(var(--qb-color-state-paused), 0.55);
-  box-shadow: 0 0 7px rgba(var(--qb-color-state-paused), 0.28);
 }
 
-.status-stalledDL,
-.status-queuedDL,
-.status-checkingDL,
-.status-checkingUP,
-.status-allocating {
-  background-color: rgba(var(--qb-color-state-stalled), 0.14);
+.mmm-qb .status-stalledDL, .mmm-qb .status-queuedDL, .mmm-qb .status-checkingDL, .mmm-qb .status-checkingUP, .mmm-qb .status-allocating {
+  background-color: rgba(var(--badge-color), 0.14);
+  border-color: rgba(var(--badge-color), 0.50);
+  box-shadow: 0 0 5px rgba(var(--badge-color), 0.16);
   color: #a0a0b4;
-  border: 1px solid rgba(var(--qb-color-state-stalled), 0.50);
-  box-shadow: 0 0 5px rgba(var(--qb-color-state-stalled), 0.16);
 }
-
-/* ── Row Tints ────────────────────────────────────────────────── */
 
 .mmm-qb.qb-tint .qb-row.state-downloading,
 .mmm-qb.qb-tint .qb-row.state-forcedDL,
@@ -404,15 +352,7 @@
   background-color: rgba(var(--qb-color-state-error), 0.08);
 }
 
-/* ── Action Buttons ───────────────────────────────────────────── */
-
-.qb-actions-cell {
-  display: flex;
-  justify-content: center;
-  align-items: center;
-}
-
-.qb-action {
+.mmm-qb .qb-action {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -427,30 +367,28 @@
   user-select: none;
 }
 
-.qb-action:hover {
+.mmm-qb .qb-action:hover {
   background-color: var(--qb-glass-bg-strong);
   border-color: rgba(255, 255, 255, 0.32);
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.28);
   transform: scale(1.06);
 }
 
-.qb-action:active {
+.mmm-qb .qb-action:active {
   transform: scale(0.94);
   transition-duration: calc(0.05s * var(--qb-anim-scale));
 }
 
-.qb-action.action-play {
+.mmm-qb .qb-action.action-play {
   border-color: rgba(var(--qb-color-state-downloading), 0.55);
   color: rgba(var(--qb-color-state-downloading), 1);
   box-shadow: 0 0 5px rgba(var(--qb-color-state-downloading), 0.18);
 }
 
-.qb-action.action-pause {
+.mmm-qb .qb-action.action-pause {
   border-color: rgba(var(--qb-color-state-paused), 0.45);
   color: rgba(var(--qb-color-state-paused), 0.92);
 }
-
-/* ── Compact Mode ─────────────────────────────────────────────── */
 
 .mmm-qb.compact .qb-th {
   padding: 6px 8px;
@@ -494,8 +432,6 @@
   font-size: 11px;
 }
 
-/* ── Animations ───────────────────────────────────────────────── */
-
 @keyframes qb-anim-pulse {
   0%, 100% { opacity: 1; transform: scale(1); }
   50%       { opacity: 0.7; transform: scale(0.98); }
@@ -508,5 +444,5 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  :root { --qb-anim-scale: 0; }
+  .mmm-qb { --qb-anim-scale: 0; }
 }
