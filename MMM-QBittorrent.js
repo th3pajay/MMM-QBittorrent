@@ -46,7 +46,7 @@ Module.register("MMM-QBittorrent", {
     missingFiles: "Missing Files"
   },
 
-  PAUSED_STATES: { pausedDL: true, pausedUP: true, error: true, missingFiles: true },
+  PAUSED_STATES: { pausedDL: true, pausedUP: true, stoppedDL: true, stoppedUP: true, error: true, missingFiles: true },
 
   STATUS_SORT_PRIORITY: {
     downloading: 5, forcedDL: 5, metaDL: 5,

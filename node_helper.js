@@ -29,6 +29,7 @@ module.exports = NodeHelper.create({
     this.pollGeneration = 0
     this.actionQueue = []
     this.actionTimer = null
+    this.qbMajorVersion = 4
     this.log("Helper started")
   },
 
@@ -236,6 +237,10 @@ module.exports = NodeHelper.create({
         Object.assign(requestOptions, this.loadTlsOptions());
       }
 
+      if (body) {
+        requestOptions.headers['Content-Length'] = Buffer.byteLength(body, 'utf8');
+      }
+
       const req = httpModule.request(requestOptions, (res) => {
         let data = "";
 
@@ -322,12 +327,35 @@ module.exports = NodeHelper.create({
         return false
       }
 
-      this.authCookie = cookies
+      const sidMatch = cookies.match(/\bSID=[^;]+/)
+      this.authCookie = sidMatch ? sidMatch[0].trim() : cookies.split(';')[0].trim()
       this.log("Authenticated successfully. Session cookie received.")
+      await this.detectVersion()
       return true
     } catch (e) {
       this.log(`Auth error: ${e.message}`)
       return false
+    }
+  },
+
+  async detectVersion() {
+    try {
+      const res = await this.makeHttpRequest({
+        url: `${this.config.connection.host}${CONSTANTS.API_APP_VERSION}`,
+        method: "GET",
+        headers: { Cookie: this.authCookie },
+        timeout: 3000
+      })
+      if (res.ok) {
+        const text = await res.text()
+        const major = parseInt(text.replace(/^v/i, '').split('.')[0], 10)
+        if (!isNaN(major)) {
+          this.qbMajorVersion = major
+          this.log(`Detected qBittorrent v${major}, using ${major >= 5 ? '/start+/stop' : '/resume+/pause'} endpoints`)
+        }
+      }
+    } catch (e) {
+      this.log(`Version detection failed, defaulting to v4 API: ${e.message}`)
     }
   },
 
@@ -542,9 +570,28 @@ module.exports = NodeHelper.create({
 
     this.log(`Flushing ${queue.length} queued action(s)`);
 
+    if (!this.authCookie) {
+      this.log("No auth cookie before flushing actions, re-authenticating...");
+      this.setState(this.STATES.AUTHENTICATING);
+      const ok = await this.authenticate();
+      if (!ok) {
+        this.log("Re-auth failed, dropping action queue");
+        this.setState(this.STATES.ERROR);
+        return;
+      }
+      this.setState(this.STATES.POLLING);
+    }
+
     const grouped = {};
+    const v5 = this.qbMajorVersion >= 5;
     for (const { hash, action } of queue) {
-      const normalized = (action === 'start') ? 'resume' : action;
+      if (!hash || hash === 'undefined') {
+        this.log(`Skipping action "${action}" — hash is missing`);
+        continue;
+      }
+      const normalized = v5
+        ? (action === 'pause' ? 'stop' : 'start')
+        : (action === 'start' ? 'resume' : 'pause');
       if (!grouped[normalized]) grouped[normalized] = new Set();
       grouped[normalized].add(hash);
     }
@@ -561,28 +608,39 @@ module.exports = NodeHelper.create({
         case "pause":
           endpoint = CONSTANTS.API_TORRENTS_PAUSE;
           break;
+        case "start":
+          endpoint = CONSTANTS.API_TORRENTS_START;
+          break;
+        case "stop":
+          endpoint = CONSTANTS.API_TORRENTS_STOP;
+          break;
         default:
           this.log(`Unknown action: ${action}`);
           continue;
       }
 
       try {
-        this.log(`Batch ${action}: ${hashes.size} torrent(s)`);
+        const body = `hashes=${[...hashes].join('|')}`;
+        this.log(`Batch ${action}: ${hashes.size} torrent(s), body: ${body}`);
         const res = await this.makeHttpRequest({
           url: `${host}${endpoint}`,
           method: "POST",
           headers: {
             Cookie: this.authCookie,
-            "Content-Type": "application/x-www-form-urlencoded"
+            "Content-Type": "application/x-www-form-urlencoded",
+            "Origin": host,
+            "Referer": `${host}/`,
+            "X-Requested-With": "XMLHttpRequest"
           },
-          body: `hashes=${[...hashes].join('|')}`,
+          body,
           timeout: 5000
         });
 
         if (res.ok) {
           this.log(`Batch action ${action} successful`);
         } else {
-          this.log(`Batch action ${action} failed with status ${res.status}`);
+          const errBody = await res.text().catch(() => '');
+          this.log(`Batch action ${action} failed with status ${res.status}: ${errBody}`);
           if (res.status === 401 || res.status === 403) {
             this.log("Auth may have expired, clearing cookie");
             this.authCookie = null;
@@ -598,7 +656,11 @@ module.exports = NodeHelper.create({
       this.restartPollingWithInterval(baseInterval);
     }
 
-    await this.pollTorrents();
+    if (!this.isPolling) {
+      await this.pollTorrents();
+    } else {
+      setTimeout(() => this.pollTorrents(), 500);
+    }
 
     if (this.actionQueue.length > 0 && !this.actionTimer) {
       this.actionTimer = setTimeout(() => this.flushActions(), CONSTANTS.ACTION_BATCH_DELAY_MS);
@@ -627,6 +689,7 @@ module.exports = NodeHelper.create({
       }
     }
     else if (notification === "QB_ACTION") {
+      this.log(`QB_ACTION received: hash=${payload.hash}, action=${payload.action}`)
       this.handleAction(payload)
     }
     else if (notification === "QB_SUSPEND") {
