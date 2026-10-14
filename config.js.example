@@ -7,6 +7,7 @@
     password: "",
 
     display: {
+      layout: "glance",              // "glance" (default, large and glanceable) | "table" (columns below apply to table; glance shows buttons when 'actions' is listed)
       maxItems: 5,                   // max torrents shown (hard cap: 50)
       viewFilter: "all",             // "all" | "downloading" | "completed" | "paused"
       columns: [                     // available: name, size, progress, status, seeds, peers,
@@ -18,7 +19,7 @@
         'ratio',
         'actions'
       ],
-      sortBy: 'added_on',            // any column name listed above
+      sortBy: 'added_on',            // any column above except actions; ties fall back to newest added; 'status' puts downloading first when asc
       sortOrder: 'desc',             // "asc" | "desc"
       compact: false,                // tighter row and cell spacing
       scale: 0.6,                    // display scale (0.01 – 10)

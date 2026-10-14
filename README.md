@@ -1,97 +1,93 @@
-MMM-QBittorrent
+# MMM-QBittorrent
 
-MagicMirror module for monitoring and controlling qBittorrent.
+A glanceable qBittorrent dashboard for [MagicMirror²](https://magicmirror.builders/). Read speeds, progress and problems from across the room, and pause or resume torrents with a tap.
 
 ![MagicMirror](https://img.shields.io/badge/MagicMirror-v2.33.0-blue)
-![Torrent](https://img.shields.io/badge/QBittorrent-green)
-![Module](https://img.shields.io/badge/Module-Display-orange)
-![Version](https://img.shields.io/badge/Version-1.2.18-yellow)
+![qBittorrent](https://img.shields.io/badge/qBittorrent-v4%20%7C%20v5-green)
+![Version](https://img.shields.io/badge/Version-1.2.23-yellow)
 ![License](https://img.shields.io/badge/License-MIT-lightgrey)
 
 <p align="center">
-<img src="Media/MMM-QBittorrent.png?raw=true" alt="In-use" width="256"/>
+<img src="Media/MMM-QBittorrent.png?raw=true" alt="MMM-QBittorrent on a mirror" width="320"/>
 </p>
 
-## Features
-
-- Live torrent progress, speed, and ETA display
-- Start, pause, and resume torrents directly from MagicMirror
-- Customizable column display and sorting
-- Filtered views (all, downloading, completed, paused)
-- Compact mode for space-constrained displays
-- Visual progress bars
-- Full HTTPS/TLS support including mutual TLS authentication
-
-## Installation
+## Install
 
 ```bash
 cd ~/MagicMirror/modules
 git clone https://github.com/th3pajay/MMM-QBittorrent.git
 ```
 
-## Configuration
-
-Add to `~/MagicMirror/config/config.js`:
+Enable the Web UI in qBittorrent, then add to `config/config.js`:
 
 ```javascript
-		{
-			module: "MMM-QBittorrent",
-			position: "bottom_left",
-			config: {
-			  connection: {
-				host: "http://192.168.1.100:8090",
-				username: "user",
-				password: "password"
-			  },
-			  polling: {
-				updateInterval: 30000,
-				pollTimeout: 2000,
-				maxConsecutiveFailures: 3,
-				pauseOnRepeatedFailures: true
-			  },
-			  display: {
-				maxItems: 5,
-				viewFilter: "all",
-				compact: true,
-				scale: 0.8,
-				columns: ['name', 'progress', 'status', 'dlspeed', 'eta', 'actions'],
-				sortBy: 'added_on',
-				sortOrder: 'desc',
-				showProgressBar: true,
-				headerAlign: "left",
-				headerDetails: {
-				  show: true,
-				  components: [
-					'downloadedSession',
-					'uploadedSession',
-					'downloadLimit',
-					'uploadLimit',
-					'totalShareRatio',
-					'completionRatio',
-					'connectedSeeds',
-					'connectedLeechers',
-					'totalPeers',
-				  ]
-				}
-			  }
-			}
-		  }
+{
+  module: "MMM-QBittorrent",
+  position: "bottom_left",
+  config: {
+    connection: { host: "http://192.168.1.100:8080", username: "user", password: "password" }
+  }
+}
 ```
 
-See `config.js.example` for complete configuration template.
+That's it. No `npm install`, no build step.
 
-## Security
+<details>
+<summary><b>Layouts</b>: glance (default) or table</summary>
 
-For HTTPS connections with self-signed certificates, either:
-- Set `connection.tls.rejectUnauthorized: false` (development only)
-- Provide CA certificate path in `connection.tls.ca` (recommended)
+| `display.layout` | Best for | Defaults |
+| --- | --- | --- |
+| `"glance"` | Reading from 2–3 m away | `scale: 1`, `maxItems: 4` |
+| `"table"` | Dense lists, close up | `scale: 0.6`, `maxItems: 5` |
 
-For mutual TLS authentication, provide both `connection.tls.cert` and `connection.tls.key`.
+</details>
 
-For simple local access you can also try to enable QBittorrent/WebUI settings:
-- Bypass authentication for clients on localhost
-- Bypass authentication for clients in whitelisted IP subnets
-and specify the subnet you use locally.
+<details>
+<summary><b>Full example</b>: every option</summary>
+
+```javascript
+config: {
+  connection: { host: "http://192.168.1.100:8080", username: "user", password: "password" },
+  polling: { updateInterval: 5000, pollTimeout: 2000, maxConsecutiveFailures: 3, pauseOnRepeatedFailures: false },
+  display: {
+    layout: "glance",
+    maxItems: 4,
+    viewFilter: "all",
+    sortBy: "added_on",
+    sortOrder: "desc",
+    columns: ["name", "progress", "status", "dlspeed", "eta", "ratio", "actions"],
+    scale: 1,
+    compact: false,
+    showProgressBar: true,
+    headerAlign: "left",
+    headerDetails: { show: true, components: ["totalShareRatio", "connectedSeeds", "downloadedSession"] },
+    colors: { rowTint: false }
+  }
+}
+```
+
+See [`config.js.example`](config.js.example) for comments on each option.
+
+</details>
+
+<details>
+<summary><b>Filtering, sorting and columns</b></summary>
+
+- `viewFilter`: `all`, `downloading`, `completed`, `paused`
+- `sortBy`: `name` `size` `progress` `status` `seeds` `peers` `dlspeed` `upspeed` `eta` `ratio` `added_on` · `sortOrder`: `asc` or `desc`
+- `columns` also controls what each row shows; add `actions` for the pause/resume button.
+- Use `sortBy: "status"` with `sortOrder: "asc"` to put downloading and errored torrents first.
+
+</details>
+
+<details>
+<summary><b>HTTPS and security</b></summary>
+
+- Self-signed certificate: set `connection.tls.ca` (recommended) or `connection.tls.rejectUnauthorized: false` (testing only).
+- Mutual TLS: set both `connection.tls.cert` and `connection.tls.key`.
+- On a trusted LAN you can let qBittorrent bypass authentication for localhost or a whitelisted subnet.
+
+</details>
 
 ## License
 
