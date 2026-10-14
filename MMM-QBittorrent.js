@@ -1,222 +1,39 @@
 Module.register("MMM-QBittorrent", {
-  // Browser-side mirror of lib/constants.js — keep in sync (browser cannot require())
-  CONSTANTS: {
-    PULSE_DURATION_MS: 1000,
-    DEFAULT_POLL_TIMEOUT_MS: 2000,
-    DEFAULT_UPDATE_INTERVAL_MS: 5000,
-    MIN_ETA_FOR_HOURS: 3600,
-    MIN_SPEED_FOR_MB: 1048576,
-    INFINITE_ETA: 8640000,
-    AUTH_RETRY_DELAY_MS: 100,
-  },
-
-  STATE_CLASS_MAP: {
-    downloading: 'downloading', forcedDL: 'downloading', metaDL: 'downloading',
-    uploading: 'seeding', forcedUP: 'seeding', stalledUP: 'seeding',
-    queuedUP: 'seeding', pausedUP: 'seeding',
-    stalledDL: 'stalled', queuedDL: 'stalled', checkingDL: 'stalled',
-    checkingUP: 'stalled', allocating: 'stalled', pausedDL: 'stalled',
-    error: 'error', missingFiles: 'error'
-  },
-
-  STATE_COLOR_MAP: {
-    downloading: 'downloading', forcedDL: 'downloading', metaDL: 'downloading',
-    uploading: 'seeding', forcedUP: 'seeding', stalledUP: 'seeding', queuedUP: 'seeding', pausedUP: 'seeding',
-    pausedDL: 'paused',
-    stalledDL: 'stalled', queuedDL: 'stalled', checkingDL: 'stalled', checkingUP: 'stalled', allocating: 'stalled',
-    error: 'error', missingFiles: 'error'
-  },
-
-  STATE_NAMES: {
-    downloading: "Downloading",
-    uploading: "Seeding",
-    pausedDL: "Paused",
-    pausedUP: "Paused",
-    stalledDL: "Stalled",
-    stalledUP: "Seeding",
-    queuedDL: "Queued",
-    queuedUP: "Queued",
-    checkingDL: "Checking",
-    checkingUP: "Checking",
-    forcedDL: "Downloading",
-    forcedUP: "Seeding",
-    metaDL: "Metadata",
-    allocating: "Allocating",
-    error: "Error",
-    missingFiles: "Missing Files"
-  },
-
-  PAUSED_STATES: { pausedDL: true, pausedUP: true, stoppedDL: true, stoppedUP: true, error: true, missingFiles: true },
-
-  STATUS_SORT_PRIORITY: {
-    downloading: 5, forcedDL: 5, metaDL: 5,
-    uploading: 4, forcedUP: 4, stalledUP: 4,
-    error: 3, missingFiles: 3,
-    pausedDL: 2, pausedUP: 2,
-    stalledDL: 1, queuedDL: 1, queuedUP: 1,
-    checkingDL: 1, checkingUP: 1, allocating: 1
-  },
-
-  COLUMN_DEFINITIONS: {
-    name: {
-      label: 'Name',
-      field: 'name',
-      align: 'left',
-      sortable: true,
-      sortFn: (a, b) => (a.name || '').localeCompare(b.name || ''),
-      formatter: function(value) { return value || 'Unknown'; },
-      bold: true
-    },
-
-    size: {
-      label: 'Size',
-      field: 'size',
-      align: 'right',
-      sortable: true,
-      sortFn: (a, b) => (a.size || 0) - (b.size || 0),
-      formatter: function(value) { return this.formatSize(value); }
-    },
-
-    progress: {
-      label: 'Progress',
-      field: 'progress',
-      align: 'center',
-      sortable: true,
-      sortFn: (a, b) => (a.progress || 0) - (b.progress || 0),
-      formatter: function(value) { return { percent: `${Math.round((value || 0) * 100)}%` }; },
-      bold: true
-    },
-
-    status: {
-      label: 'Status',
-      field: 'state',
-      align: 'center',
-      sortable: true,
-      sortFn: function(a, b) {
-        return (this.STATUS_SORT_PRIORITY[b.state] || 0) - (this.STATUS_SORT_PRIORITY[a.state] || 0);
-      },
-      formatter: function(value) {
-        return { state: value, displayText: this.formatStateName(value) };
-      },
-      bold: true
-    },
-
-    seeds: {
-      label: 'Seeds',
-      field: 'num_seeds',
-      align: 'center',
-      sortable: true,
-      sortFn: (a, b) => (a.num_seeds || 0) - (b.num_seeds || 0),
-      formatter: function(value) { return value || 0; }
-    },
-
-    peers: {
-      label: 'Peers',
-      field: 'num_leechs',
-      align: 'center',
-      sortable: true,
-      sortFn: (a, b) => (a.num_leechs || 0) - (b.num_leechs || 0),
-      formatter: function(value) { return value || 0; }
-    },
-
-    dlspeed: {
-      label: 'Down Speed',
-      field: 'dlspeed',
-      align: 'right',
-      sortable: true,
-      sortFn: (a, b) => (a.dlspeed || 0) - (b.dlspeed || 0),
-      formatter: function(value) { return this.formatSpeed(value); }
-    },
-
-    upspeed: {
-      label: 'Up Speed',
-      field: 'upspeed',
-      align: 'right',
-      sortable: true,
-      sortFn: (a, b) => (a.upspeed || 0) - (b.upspeed || 0),
-      formatter: function(value) { return this.formatSpeed(value); }
-    },
-
-    eta: {
-      label: 'ETA',
-      field: 'eta',
-      align: 'center',
-      sortable: true,
-      sortFn: function(a, b) {
-        const etaA = a.eta === this.CONSTANTS.INFINITE_ETA ? Infinity : (a.eta || 0);
-        const etaB = b.eta === this.CONSTANTS.INFINITE_ETA ? Infinity : (b.eta || 0);
-        return etaA - etaB;
-      },
-      formatter: function(value) { return this.formatETA(value); }
-    },
-
-    ratio: {
-      label: 'Ratio',
-      field: 'ratio',
-      align: 'center',
-      sortable: true,
-      sortFn: (a, b) => (a.ratio || 0) - (b.ratio || 0),
-      formatter: function(value) { return (value || 0).toFixed(2); }
-    },
-
-    added_on: {
-      label: 'Added',
-      field: 'added_on',
-      align: 'center',
-      sortable: true,
-      sortFn: (a, b) => (a.added_on || 0) - (b.added_on || 0),
-      formatter: function(value) { return this.formatDate(value); }
-    },
-
-    actions: {
-      label: 'Actions',
-      field: null,
-      align: 'center',
-      sortable: false
-    }
-  },
-
-  defaults: {
-    host: "",
-    username: "",
-    password: "",
-    updateInterval: 5000,
-    maxItems: 5,
-    viewFilter: "all",
-    compact: false,
-    scale: 0.6,
-    columns: ['name', 'progress', 'status', 'dlspeed', 'eta', 'ratio', 'actions'],
-    sortBy: 'added_on',
-    sortOrder: 'desc',
-    showProgressBar: true,
-    headerAlign: null,
-  },
+  defaults: {},
 
   start() {
-    console.log("[MMM-QBittorrent] Starting module...");
+    const missing = ["Config", "TorrentState", "Format", "TorrentView", "Motion", "Columns", "Glance"].filter(n => !window[`MMMQB${n}`]);
+    if (missing.length > 0) {
+      this.startError = `Failed to load: ${missing.join(", ")}`;
+      console.error("[MMM-QBittorrent]", this.startError);
+      return;
+    }
 
-    this.torrents = new Map();
-    this.completed = new Set();
+    this.view = MMMQBTorrentView.create();
     this.loaded = false;
     this.initializing = true;
     this.errorMessage = null;
     this.errorDetails = null;
-    this.transferInfo = null;
 
     this.authTimestamp = null;
 
     this.moduleId = this.identifier;
-    this.cachedDisplayTorrents = null;
-    this.cachedConfigHash = null;
-    this.normalizedConfig = this.normalizeConfig();
-    this.pulseTimers = new Map();
+    const normalized = MMMQBConfig.normalize(this.config);
+    normalized.warnings.forEach(w => console.warn("[MMM-QBittorrent]", w));
+    this.normalizedConfig = normalized.display;
+    this.motion = MMMQBMotion.create();
+    this.glance = this.normalizedConfig.layout === "glance"
+      ? MMMQBGlance.create({ config: this.normalizedConfig, motion: this.motion, view: this.view, locale: this.config.language || navigator.language })
+      : null;
+    this.prevHashes = null;
+    this.prevAggregateSpeed = null;
     this.sslWarning = null;
 
     this.boundClickHandler = (e) => {
       if (e.type === 'touchend') e.preventDefault();
       const btn = e.target.closest('.qb-action');
       if (!btn) return;
-      const wrapper = btn.closest('.mmm-qb');
+      const wrapper = btn.closest('[data-module-id]');
       if (!wrapper || wrapper.dataset.moduleId !== this.moduleId) return;
       const hash = btn.dataset.hash;
       const action = btn.dataset.action;
@@ -227,11 +44,11 @@ Module.register("MMM-QBittorrent", {
     document.addEventListener('click', this.boundClickHandler);
     document.addEventListener('touchend', this.boundClickHandler);
 
-    console.log("[MMM-QBittorrent] Sending QB_INIT to node_helper with config:", {
-      host: this.config.host,
-      updateInterval: this.config.updateInterval
-    });
     this.sendSocketNotification("QB_INIT", this.config);
+  },
+
+  getScripts() {
+    return ["config", "torrent-state", "format", "torrent-view", "motion", "columns", "glance"].map(name => this.file(`lib/${name}.js`));
   },
 
   getStyles() {
@@ -239,20 +56,16 @@ Module.register("MMM-QBittorrent", {
   },
 
   stop() {
-    console.log("[MMM-QBittorrent] Stopping module...");
     if (this.boundClickHandler) {
       document.removeEventListener('click', this.boundClickHandler);
       document.removeEventListener('touchend', this.boundClickHandler);
       this.boundClickHandler = null;
     }
-    if (this.pulseTimers) {
-      for (const id of this.pulseTimers.values()) clearTimeout(id);
-      this.pulseTimers.clear();
-    }
+    if (this.motion) this.motion.dispose();
+    if (this.glance) this.glance.stop();
   },
 
   suspend() {
-    console.log("[MMM-QBittorrent] Suspending polling");
     if (this.boundClickHandler && this.isListenerAttached) {
       document.removeEventListener('click', this.boundClickHandler);
       document.removeEventListener('touchend', this.boundClickHandler);
@@ -262,7 +75,6 @@ Module.register("MMM-QBittorrent", {
   },
 
   resume() {
-    console.log("[MMM-QBittorrent] Resuming polling");
     if (this.boundClickHandler && !this.isListenerAttached) {
       document.addEventListener('click', this.boundClickHandler);
       document.addEventListener('touchend', this.boundClickHandler);
@@ -271,90 +83,65 @@ Module.register("MMM-QBittorrent", {
     this.sendSocketNotification("QB_RESUME", {});
   },
 
-  /** @param {TorrentData|null} oldTorrent @param {TorrentData} newTorrent @returns {boolean} */
-  hasRelevantChanges(oldTorrent, newTorrent) {
-    if (!oldTorrent) return true;
-    if (oldTorrent === newTorrent) return false;
-
-    const criticalFields = ['progress', 'state', 'dlspeed', 'upspeed', 'eta'];
-    for (const field of criticalFields) {
-      if (oldTorrent[field] !== newTorrent[field]) return true;
-    }
-
-    const secondaryFields = ['num_seeds', 'num_leechs', 'ratio', 'size', 'completed'];
-    for (const field of secondaryFields) {
-      if (oldTorrent[field] !== newTorrent[field]) return true;
-    }
-
-    return false;
-  },
-
   /** @param {string} notification @param {any} payload */
   socketNotificationReceived(notification, payload) {
     if (notification === "QB_UPDATE") {
       const { torrents: torrentList, transferInfo } = payload;
-      console.log(`[MMM-QBittorrent] Received QB_UPDATE with ${torrentList?.length || 0} torrents`);
       this.initializing = false;
       this.authTimestamp = Date.now();
-      this.transferInfo = transferInfo || null;
 
-      let dataChanged = false;
-      let structureChanged = false;
-      const currentHashes = new Set(torrentList.map(t => t.hash));
-
-      for (const hash of this.torrents.keys()) {
-        if (!currentHashes.has(hash)) {
-          this.torrents.delete(hash);
-          this.completed.delete(hash);
-          dataChanged = true;
-          structureChanged = true;
-        }
-      }
-
-      torrentList.forEach(t => {
-        const existing = this.torrents.get(t.hash);
-        if (!existing) {
-          structureChanged = true;
-        }
-        if (this.hasRelevantChanges(existing, t)) {
-          this.torrents.set(t.hash, t);
-          dataChanged = true;
-        }
-      });
-
-      this.completed = new Set([...this.completed].filter(h => this.torrents.has(h)));
-
+      const { dataChanged, structureChanged, hashes } = this.view.ingest(torrentList, transferInfo);
+      this.motion.prune(h => this.view.has(h));
       this.loaded = true;
 
-      if (dataChanged) {
-        this.cachedDisplayTorrents = null;
-        console.log("[MMM-QBittorrent] Data changed, updating DOM");
+      if (this.glance) {
+        this.glance.update(this.glanceStatus());
+      } else if (dataChanged) {
         if (structureChanged) {
-          this.updateDom();
+          this.animateStructureChange(hashes);
         } else {
           this.incrementalUpdate();
         }
-      } else {
-        console.log("[MMM-QBittorrent] No data changes, skipping DOM update");
       }
     }
     else if (notification === "QB_WARN") {
       this.sslWarning = payload.message;
-      this.updateDom();
+      this.refresh();
     }
     else if (notification === "QB_ERROR") {
-      console.error("[MMM-QBittorrent] Received QB_ERROR:", payload);
       this.initializing = false;
       this.loaded = false;
       this.errorMessage = payload.message || "Connection failed";
       this.errorDetails = payload.failures ? `(${payload.failures} consecutive failures)` : "";
-      this.updateDom();
+      this.refresh();
     }
+  },
+
+  refresh() {
+    if (this.glance) this.glance.update(this.glanceStatus());
+    else this.updateDom();
+  },
+
+  glanceStatus() {
+    const ssl = Boolean(this.sslWarning);
+    if (this.initializing) return { state: "connecting", message: "Connecting to qBittorrent...", ssl };
+    if (!this.loaded) return { state: "error", message: this.errorMessage || "qBittorrent offline", details: this.errorDetails, ssl };
+    return { state: "ok", ssl };
   },
 
   /** @returns {HTMLElement} */
   getDom() {
     const wrapper = document.createElement("div");
+
+    if (this.startError || !this.normalizedConfig) {
+      wrapper.className = "mmm-qb";
+      const msg = document.createElement("div");
+      msg.className = "dimmed small qb-status-message";
+      msg.style.color = "#ff6b6b";
+      msg.textContent = `MMM-QBittorrent did not start: ${this.startError || "start() did not complete (see browser console)"}`;
+      wrapper.appendChild(msg);
+      return wrapper;
+    }
 
     try {
       const config = this.normalizedConfig;
@@ -368,6 +155,14 @@ Module.register("MMM-QBittorrent", {
         wrapper.style.transformOrigin = "bottom left";
       } else {
         wrapper.style.transformOrigin = "top left";
+      }
+
+      if (this.glance) {
+        wrapper.className = "qb-gw";
+        this.glance.el.dataset.align = config.headerAlign || (position.includes("right") ? "right" : position.includes("center") ? "center" : "left");
+        wrapper.appendChild(this.glance.el);
+        this.glance.update(this.glanceStatus());
+        return wrapper;
       }
 
       const header = this.renderModuleHeader(config);
@@ -408,6 +203,8 @@ Module.register("MMM-QBittorrent", {
         wrapper.appendChild(msg);
       }
 
+      this.prevHashes = new Set(displayTorrents.map(t => t.hash));
+
     } catch (error) {
       console.error("[MMM-QBittorrent] Error in getDom():", error);
       wrapper.className = "mmm-qb";
@@ -438,21 +235,7 @@ Module.register("MMM-QBittorrent", {
 
   /** @param {NormalizedConfig} config @returns {TorrentData[]} */
   getDisplayTorrents(config) {
-    const configHash = `${config.sortBy}-${config.sortOrder}-${config.maxItems}-${config.viewFilter}`;
-    if (this.cachedDisplayTorrents && this.cachedConfigHash === configHash) {
-      return this.cachedDisplayTorrents;
-    }
-
-    const sortedTorrents = this.sortTorrents(
-      [...this.torrents.values()].filter(t => this.applyFilter(t)),
-      config.sortBy,
-      config.sortOrder
-    );
-
-    const displayTorrents = sortedTorrents.slice(0, config.maxItems);
-    this.cachedDisplayTorrents = displayTorrents;
-    this.cachedConfigHash = configHash;
-    return displayTorrents;
+    return this.view.select(config);
   },
 
   incrementalUpdate() {
@@ -463,11 +246,18 @@ Module.register("MMM-QBittorrent", {
     }
 
     const speedSpan = wrapper.querySelector('.qb-header-speed');
-    if (speedSpan) speedSpan.textContent = this.formatAggregateSpeed();
+    if (speedSpan) {
+      const aggregate = this.view.aggregateSpeed();
+      if (this.prevAggregateSpeed !== null && aggregate !== this.prevAggregateSpeed && aggregate) {
+        this.motion.flashTick(speedSpan, `${this.moduleId}:header`);
+      }
+      this.prevAggregateSpeed = aggregate;
+      speedSpan.textContent = aggregate;
+    }
 
     const config = this.normalizedConfig;
     if (config.headerDetails.show) {
-      const stats = this.computeHeaderStats(config);
+      const stats = this.view.headerStats(config.headerDetails.components);
       for (const { key, value } of stats) {
         const el = wrapper.querySelector(`.qb-stat-value[data-stat="${key}"]`);
         if (el) el.textContent = value;
@@ -482,177 +272,30 @@ Module.register("MMM-QBittorrent", {
         this.updateDom();
         return;
       }
-      this.updateRowContent(row, torrent, config);
+      MMMQBColumns.patchRow(row, torrent, this.cellContext(config));
     }
   },
 
-  /** @param {HTMLElement} row @param {TorrentData} torrent @param {NormalizedConfig} config */
-  updateRowContent(row, torrent, config) {
-    row.className = `qb-row state-${torrent.state}`;
-
-    for (const columnName of config.columns) {
-      const colDef = this.COLUMN_DEFINITIONS[columnName];
-      if (!colDef) continue;
-
-      const td = row.querySelector(`.col-${columnName}`);
-      if (!td) continue;
-
-      switch (columnName) {
-        case 'progress': {
-          const progressBar = td.querySelector('.qb-progress-bar');
-          const progressText = td.querySelector('.qb-progress-text, .qb-progress-text-only');
-          const percent = `${Math.round((torrent.progress || 0) * 100)}%`;
-          if (progressBar) {
-            progressBar.style.width = percent;
-            const stateClass = this.getProgressBarStateClass(torrent.state, torrent.progress);
-            progressBar.className = `qb-progress-bar ${stateClass}`;
-            const barColors = config.colors.progressBar;
-            const colorGroup = this.STATE_CLASS_MAP[torrent.state] || 'downloading';
-            const customColor = barColors[colorGroup];
-            progressBar.style.background = customColor || '';
-          }
-          if (progressText) progressText.textContent = percent;
-          break;
-        }
-        case 'status': {
-          const badge = td.querySelector('.qb-status-badge');
-          if (badge) {
-            badge.className = `qb-status-badge status-${torrent.state}`;
-            badge.textContent = this.formatStateName(torrent.state);
-            const badgeColors = config.colors.statusBadge;
-            const colorGroup = this.STATE_COLOR_MAP[torrent.state] || 'stalled';
-            const customColor = badgeColors[colorGroup];
-            badge.style.backgroundColor = customColor || '';
-          }
-          break;
-        }
-        case 'actions': {
-          const btn = td.querySelector('.qb-action');
-          if (btn) {
-            const isStopped = this.PAUSED_STATES[torrent.state];
-            btn.textContent = isStopped ? '▶' : '⏸';
-            btn.dataset.action = isStopped ? 'start' : 'pause';
-            btn.className = `qb-action ${isStopped ? 'action-play' : 'action-pause'}`;
-          }
-          break;
-        }
-        default: {
-          const fieldValue = colDef.field ? torrent[colDef.field] : null;
-          const formatted = colDef.formatter.call(this, fieldValue, torrent);
-          if (typeof formatted === 'object' && formatted !== null) {
-            console.error(`[MMM-QBittorrent] Column '${columnName}' formatter returned object; add a switch case`);
-            td.textContent = '';
-          } else {
-            td.textContent = formatted ?? '';
-          }
-        }
-      }
-    }
+  /** @param {NormalizedConfig} config */
+  cellContext(config) {
+    return { config, motion: this.motion, locale: this.config.language || navigator.language };
   },
 
-  /** @param {TorrentData} t @returns {boolean} */
-  applyFilter(t) {
-    const viewFilter = this.normalizedConfig.viewFilter;
-    switch (viewFilter) {
-      case "downloading": return ['downloading', 'forcedDL', 'metaDL'].includes(t.state);
-      case "completed": return t.progress === 1;
-      case "paused": return t.state === "pausedDL" || t.state === "pausedUP";
-      default: return true;
+  /** @param {Set<string>} currentHashes */
+  animateStructureChange(currentHashes) {
+    const wrapper = document.querySelector(`.mmm-qb[data-module-id="${this.moduleId}"]`);
+    if (!wrapper || this.motion.reduced()) {
+      this.updateDom();
+      return;
     }
-  },
-
-  /** @returns {NormalizedConfig} */
-  normalizeConfig() {
-    const config = {
-      compact: this.config.display?.compact ?? this.config.compact ?? false,
-      scale: this.config.display?.scale ?? this.config.scale ?? 0.6,
-      maxItems: this.config.display?.maxItems ?? this.config.maxItems ?? 5,
-      viewFilter: this.config.display?.viewFilter ?? this.config.viewFilter ?? "all",
-      columns:         this.config.display?.columns         ?? this.config.columns         ?? ['name', 'progress', 'status', 'dlspeed', 'eta', 'actions'],
-      sortBy:          this.config.display?.sortBy          ?? this.config.sortBy          ?? 'added_on',
-      sortOrder:       this.config.display?.sortOrder       ?? this.config.sortOrder       ?? 'desc',
-      showProgressBar: this.config.display?.showProgressBar ?? this.config.showProgressBar ?? true,
-      headerAlign:     this.config.display?.headerAlign     ?? this.config.headerAlign     ?? null,
-      headerDetails: {
-        show: this.config.display?.headerDetails?.show ?? false,
-        components: this.config.display?.headerDetails?.components ?? [
-          'downloadedSession', 'uploadedSession',
-          'downloadLimit', 'uploadLimit',
-          'totalShareRatio', 'completionRatio',
-          'connectedSeeds', 'connectedLeechers', 'totalPeers'
-        ]
-      }
-    };
-
-    if (typeof config.scale !== 'number' || config.scale <= 0 || config.scale > 10) {
-      console.warn("[MMM-QBittorrent] Invalid scale value:", config.scale, "- using default 0.6");
-      config.scale = 0.6;
+    const leaving = [...wrapper.querySelectorAll('tr[data-hash]')]
+      .filter(r => !currentHashes.has(r.dataset.hash));
+    if (leaving.length === 0) {
+      this.updateDom();
+      return;
     }
-
-    if (config.maxItems > 50) {
-      console.warn("[MMM-QBittorrent] maxItems capped at 50 for performance");
-      config.maxItems = 50;
-    }
-
-    config.columns = config.columns.filter(col => this.COLUMN_DEFINITIONS[col]);
-    if (config.columns.length === 0) {
-      config.columns = ['name', 'progress', 'status', 'actions'];
-    }
-
-    if (!this.COLUMN_DEFINITIONS[config.sortBy]) {
-      config.sortBy = 'added_on';
-    }
-
-    if (config.sortOrder !== 'asc' && config.sortOrder !== 'desc') {
-      config.sortOrder = 'desc';
-    }
-
-    const rawColors = this.config.display?.colors || {};
-    config.colors = {
-      rowTint: rawColors.rowTint === true,
-      progressBar: {
-        downloading: rawColors.progressBar?.downloading ?? null,
-        seeding:     rawColors.progressBar?.seeding     ?? null,
-        stalled:     rawColors.progressBar?.stalled     ?? null,
-        error:       rawColors.progressBar?.error       ?? null,
-      },
-      statusBadge: {
-        downloading: rawColors.statusBadge?.downloading ?? null,
-        seeding:     rawColors.statusBadge?.seeding     ?? null,
-        paused:      rawColors.statusBadge?.paused      ?? null,
-        error:       rawColors.statusBadge?.error       ?? null,
-        stalled:     rawColors.statusBadge?.stalled     ?? null,
-      }
-    };
-
-    return config;
-  },
-
-  /** @param {number} seconds @returns {string} */
-  formatETA(seconds) {
-    if (seconds <= 0 || seconds === this.CONSTANTS.INFINITE_ETA) return "∞";
-    if (seconds < 60) return `${seconds}s`;
-    if (seconds < this.CONSTANTS.MIN_ETA_FOR_HOURS) return `${Math.round(seconds / 60)}m`;
-    const hours = Math.floor(seconds / 3600);
-    const mins = Math.round((seconds % 3600) / 60);
-    return mins > 0 ? `${hours}h ${mins}m` : `${hours}h`;
-  },
-
-  /** @param {number} bytesPerSec @returns {string} */
-  formatSpeed(bytesPerSec) {
-    if (!bytesPerSec) return "";
-    if (bytesPerSec < this.CONSTANTS.MIN_SPEED_FOR_MB) return `${(bytesPerSec / 1024).toFixed(1)} KB/s`;
-    return `${(bytesPerSec / 1024 / 1024).toFixed(1)} MB/s`;
-  },
-
-  /** @param {string} label @param {string} action @param {string} hash @returns {HTMLElement} */
-  actionButton(label, action, hash) {
-    const btn = document.createElement("div");
-    btn.className = "qb-action";
-    btn.textContent = label;
-    btn.dataset.hash = hash;
-    btn.dataset.action = action;
-    return btn;
+    leaving.forEach(r => r.classList.add('qb-row-leave'));
+    setTimeout(() => this.updateDom(), MMMQBConfig.CONSTANTS.LEAVE_ANIM_MS);
   },
 
   /** @param {NormalizedConfig} config @returns {HTMLElement} */
@@ -680,7 +323,7 @@ Module.register("MMM-QBittorrent", {
 
     const speedSpan = document.createElement("span");
     speedSpan.className = "qb-header-speed";
-    speedSpan.textContent = this.formatAggregateSpeed();
+    speedSpan.textContent = this.view.aggregateSpeed();
 
     titleRow.appendChild(headerText);
     titleRow.appendChild(speedSpan);
@@ -709,7 +352,7 @@ Module.register("MMM-QBittorrent", {
 
   /** @param {NormalizedConfig} config @returns {HTMLElement|null} */
   renderHeaderDetails(config) {
-    const stats = this.computeHeaderStats(config);
+    const stats = this.view.headerStats(config.headerDetails.components);
     if (stats.length === 0) return null;
 
     const grid = document.createElement("div");
@@ -737,318 +380,26 @@ Module.register("MMM-QBittorrent", {
     return grid;
   },
 
-  /** @param {NormalizedConfig} config @returns {{key: string, label: string, value: string}[]} */
-  computeHeaderStats(config) {
-    const info = this.transferInfo;
-    const all = [...this.torrents.values()];
-    const results = [];
-
-    const STAT_DEFS = {
-      downloadedSession: {
-        label: 'DL Session',
-        value: () => info ? this.formatSize(info.dl_info_data) : '—'
-      },
-      uploadedSession: {
-        label: 'UL Session',
-        value: () => info ? this.formatSize(info.up_info_data) : '—'
-      },
-      downloadLimit: {
-        label: 'DL Limit',
-        value: () => info ? (info.dl_rate_limit > 0 ? this.formatSpeed(info.dl_rate_limit) : '∞') : '—'
-      },
-      uploadLimit: {
-        label: 'UL Limit',
-        value: () => info ? (info.up_rate_limit > 0 ? this.formatSpeed(info.up_rate_limit) : '∞') : '—'
-      },
-      totalShareRatio: {
-        label: 'Share Ratio',
-        value: () => {
-          let totalUploaded = 0, totalDownloaded = 0;
-          for (const t of all) {
-            totalUploaded += t.uploaded || 0;
-            totalDownloaded += t.downloaded || 0;
-          }
-          if (totalDownloaded === 0) return '—';
-          return (totalUploaded / totalDownloaded).toFixed(2);
-        }
-      },
-      completionRatio: {
-        label: 'Complete',
-        value: () => {
-          if (all.length === 0) return '—';
-          const done = all.filter(t => t.progress === 1).length;
-          return `${Math.round((done / all.length) * 100)}%`;
-        }
-      },
-      connectedSeeds: {
-        label: 'Seeds',
-        value: () => all.reduce((s, t) => s + (t.num_seeds || 0), 0).toString()
-      },
-      connectedLeechers: {
-        label: 'Leechers',
-        value: () => all.reduce((s, t) => s + (t.num_leechs || 0), 0).toString()
-      },
-      totalPeers: {
-        label: 'Peers',
-        value: () => all.reduce((s, t) => s + (t.num_seeds || 0) + (t.num_leechs || 0), 0).toString()
-      }
-    };
-
-    for (const key of config.headerDetails.components) {
-      const def = STAT_DEFS[key];
-      if (!def) continue;
-      results.push({ key, label: def.label, value: def.value() });
-    }
-
-    return results.slice(0, 9); // 3 cols × 3 rows max
-  },
-
   /** @param {TorrentData[]} torrents @param {NormalizedConfig} config @returns {HTMLElement} */
   renderTable(torrents, config) {
     const table = document.createElement("table");
     table.className = "qb-table";
 
-    const thead = this.renderTableHeader(config.columns);
+    const thead = document.createElement("thead");
+    thead.className = "qb-thead";
+    thead.appendChild(MMMQBColumns.createHeaderRow(config.columns));
     table.appendChild(thead);
 
     const tbody = document.createElement("tbody");
     tbody.className = "qb-tbody";
 
+    const ctx = this.cellContext(config);
     torrents.forEach(torrent => {
-      const row = this.renderTableRow(torrent, config);
-      tbody.appendChild(row);
+      const enter = Boolean(this.prevHashes) && !this.prevHashes.has(torrent.hash);
+      tbody.appendChild(MMMQBColumns.createRow(torrent, ctx, { enter }));
     });
 
     table.appendChild(tbody);
     return table;
-  },
-
-  /** @param {string[]} columns @returns {HTMLElement} */
-  renderTableHeader(columns) {
-    const thead = document.createElement("thead");
-    thead.className = "qb-thead";
-
-    const headerRow = document.createElement("tr");
-    headerRow.className = "qb-header-row";
-
-    columns.forEach(columnName => {
-      const colDef = this.COLUMN_DEFINITIONS[columnName];
-      if (!colDef) return;
-
-      const th = document.createElement("th");
-      th.className = `qb-th col-${columnName}`;
-      th.textContent = colDef.label;
-      th.style.textAlign = colDef.align;
-
-      headerRow.appendChild(th);
-    });
-
-    thead.appendChild(headerRow);
-    return thead;
-  },
-
-  /** @param {TorrentData} torrent @param {NormalizedConfig} config @returns {HTMLElement} */
-  renderTableRow(torrent, config) {
-    const row = document.createElement("tr");
-    row.className = `qb-row state-${torrent.state}`;
-    row.dataset.hash = torrent.hash;
-
-    config.columns.forEach(columnName => {
-      const colDef = this.COLUMN_DEFINITIONS[columnName];
-      if (!colDef) return;
-
-      const td = document.createElement("td");
-      td.className = `qb-td col-${columnName}`;
-      td.style.textAlign = colDef.align;
-
-      if (colDef.bold) {
-        td.style.fontWeight = 'bold';
-      }
-
-      switch (columnName) {
-        case 'progress':
-          this.renderProgressCell(td, torrent, config.showProgressBar, config.colors.progressBar);
-          break;
-        case 'status':
-          this.renderStatusCell(td, torrent, config.colors.statusBadge);
-          break;
-        case 'actions':
-          this.renderActionsCell(td, torrent);
-          break;
-        default: {
-          const fieldValue = colDef.field ? torrent[colDef.field] : null;
-          const formatted = colDef.formatter.call(this, fieldValue, torrent);
-          if (typeof formatted === 'object' && formatted !== null) {
-            console.error(`[MMM-QBittorrent] Column '${columnName}' formatter returned object; add a switch case`);
-            td.textContent = '';
-          } else {
-            td.textContent = formatted ?? '';
-          }
-        }
-      }
-
-      row.appendChild(td);
-    });
-
-    return row;
-  },
-
-  /** @param {HTMLElement} td @param {TorrentData} torrent @param {boolean} showBar @param {object|null} barColors */
-  renderProgressCell(td, torrent, showBar, barColors) {
-    const progressData = this.COLUMN_DEFINITIONS.progress.formatter.call(this, torrent.progress, torrent);
-
-    const container = document.createElement("div");
-    container.className = "qb-progress-cell";
-
-    if (showBar) {
-      const barContainer = document.createElement("div");
-      barContainer.className = "qb-progress-bar-container";
-
-      const bar = document.createElement("div");
-      bar.className = "qb-progress-bar";
-      bar.style.width = progressData.percent;
-
-      const stateClass = this.getProgressBarStateClass(torrent.state, torrent.progress);
-      if (stateClass) {
-        bar.classList.add(stateClass);
-      }
-
-      if (barColors) {
-        const colorGroup = this.STATE_CLASS_MAP[torrent.state] || 'downloading';
-        const customColor = barColors[colorGroup];
-        if (customColor) bar.style.background = customColor;
-      }
-
-      if (torrent.progress === 1 && !this.completed.has(torrent.hash)) {
-        bar.classList.add("pulse");
-        this.completed.add(torrent.hash);
-        if (this.pulseTimers.has(torrent.hash)) {
-          clearTimeout(this.pulseTimers.get(torrent.hash));
-        }
-        const timerId = setTimeout(() => {
-          bar.classList.remove("pulse");
-          this.pulseTimers.delete(torrent.hash);
-        }, this.CONSTANTS.PULSE_DURATION_MS);
-        this.pulseTimers.set(torrent.hash, timerId);
-      }
-
-      barContainer.appendChild(bar);
-
-      const text = document.createElement("div");
-      text.className = "qb-progress-text";
-      text.textContent = progressData.percent;
-
-      container.appendChild(barContainer);
-      container.appendChild(text);
-    } else {
-      const text = document.createElement("div");
-      text.className = "qb-progress-text-only";
-      text.textContent = progressData.percent;
-      container.appendChild(text);
-    }
-
-    td.appendChild(container);
-  },
-
-  /** @param {string} state @param {number} progress @returns {string} */
-  getProgressBarStateClass(state, progress) {
-    if (progress === 1) return 'seeding';
-    return this.STATE_CLASS_MAP[state] || 'downloading';
-  },
-
-  /** @param {HTMLElement} td @param {TorrentData} torrent @param {object|null} badgeColors */
-  renderStatusCell(td, torrent, badgeColors) {
-    const statusData = this.COLUMN_DEFINITIONS.status.formatter.call(this, torrent.state, torrent);
-
-    const badge = document.createElement("span");
-    badge.className = `qb-status-badge status-${statusData.state}`;
-    badge.textContent = statusData.displayText;
-
-    if (badgeColors) {
-      const colorGroup = this.STATE_COLOR_MAP[torrent.state] || 'stalled';
-      const customColor = badgeColors[colorGroup];
-      if (customColor) badge.style.backgroundColor = customColor;
-    }
-
-    td.appendChild(badge);
-  },
-
-  /** @param {HTMLElement} td @param {TorrentData} torrent */
-  renderActionsCell(td, torrent) {
-    const isStopped = this.PAUSED_STATES[torrent.state];
-    const btn = this.actionButton(
-      isStopped ? "▶" : "⏸",
-      isStopped ? "start" : "pause",
-      torrent.hash
-    );
-    btn.classList.add(isStopped ? "action-play" : "action-pause");
-    td.appendChild(btn);
-  },
-
-  /** @param {TorrentData[]} torrents @param {string} sortBy @param {string} sortOrder @returns {TorrentData[]} */
-  sortTorrents(torrents, sortBy, sortOrder) {
-    const colDef = this.COLUMN_DEFINITIONS[sortBy];
-
-    if (!colDef || !colDef.sortable) {
-      return torrents.sort((a, b) => (b.added_on || 0) - (a.added_on || 0));
-    }
-
-    const boundSortFn = colDef.sortFn.bind(this);
-
-    if (sortOrder === 'desc') {
-      return torrents.sort((a, b) => boundSortFn(b, a));
-    }
-
-    return torrents.sort(boundSortFn);
-  },
-
-  /** @param {number} bytes @returns {string} */
-  formatSize(bytes) {
-    if (!bytes || bytes <= 0) return "0 B";
-
-    const units = ['B', 'KB', 'MB', 'GB', 'TB'];
-    const k = 1024;
-    const i = Math.floor(Math.log(bytes) / Math.log(k));
-    const unitIndex = Math.min(i, units.length - 1);
-    const value = bytes / Math.pow(k, unitIndex);
-    const decimals = value < 10 ? 1 : 0;
-
-    return `${value.toFixed(decimals)} ${units[unitIndex]}`;
-  },
-
-  /** @param {number} timestamp @returns {string} */
-  formatDate(timestamp) {
-    if (!timestamp) return "Unknown";
-
-    const date = new Date(timestamp * 1000);
-    const now = new Date();
-    const diffMs = now - date;
-    const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
-
-    if (diffDays === 0) return "Today";
-    else if (diffDays === 1) return "Yesterday";
-    else if (diffDays < 7) return `${diffDays}d ago`;
-    else if (diffDays < 30) return `${Math.floor(diffDays / 7)}w ago`;
-
-    const options = { month: 'short', day: 'numeric', year: 'numeric' };
-    return date.toLocaleDateString(this.config.language || navigator.language || 'en-US', options);
-  },
-
-  /** @param {string} state @returns {string} */
-  formatStateName(state) {
-    return this.STATE_NAMES[state] || state;
-  },
-
-  /** @returns {string} */
-  formatAggregateSpeed() {
-    let totalDl = 0, totalUp = 0;
-    for (const t of this.torrents.values()) {
-      totalDl += t.dlspeed || 0;
-      totalUp += t.upspeed || 0;
-    }
-    const parts = [];
-    if (totalDl > 0) parts.push(`↓ ${this.formatSpeed(totalDl)}`);
-    if (totalUp > 0) parts.push(`↑ ${this.formatSpeed(totalUp)}`);
-    return parts.join('  ');
   }
 });
