@@ -118,9 +118,18 @@ module.exports = NodeHelper.create({
       session,
       settings: this.config.polling,
       log,
-      onUpdate: data => this.sendSocketNotification("QB_UPDATE", data),
-      onError: error => this.sendSocketNotification("QB_ERROR", error)
+      onUpdate: data => {
+        const text = JSON.stringify(data)
+        if (text === this.lastSent) return
+        this.lastSent = text
+        this.sendSocketNotification("QB_UPDATE", data)
+      },
+      onError: error => {
+        this.lastSent = null
+        this.sendSocketNotification("QB_ERROR", error)
+      }
     })
+    this.lastSent = null
 
     this.session = session
     this.scheduler = scheduler
@@ -153,6 +162,7 @@ module.exports = NodeHelper.create({
     }
 
     const result = await session.applyActions(queue)
+    if (!result.ok) this.sendSocketNotification("QB_ACTION_FAILED", { hashes: queue.map(a => a.hash) })
     if (result.reason === "auth") {
       this.log("Re-auth failed, dropped action queue")
     } else if (scheduler === this.scheduler) {

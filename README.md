@@ -4,7 +4,7 @@ A glanceable qBittorrent dashboard for [MagicMirror²](https://magicmirror.build
 
 ![MagicMirror](https://img.shields.io/badge/MagicMirror-v2.33.0-blue)
 ![qBittorrent](https://img.shields.io/badge/qBittorrent-v4%20%7C%20v5-green)
-![Version](https://img.shields.io/badge/Version-1.2.23-yellow)
+![Version](https://img.shields.io/badge/Version-1.2.25-yellow)
 ![License](https://img.shields.io/badge/License-MIT-lightgrey)
 
 <p align="center">

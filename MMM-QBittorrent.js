@@ -38,6 +38,7 @@ Module.register("MMM-QBittorrent", {
       const hash = btn.dataset.hash;
       const action = btn.dataset.action;
       this.sendSocketNotification("QB_ACTION", { hash, action });
+      if (this.view.expect(hash, action)) this.redraw();
     };
 
     this.isListenerAttached = true;
@@ -104,6 +105,9 @@ Module.register("MMM-QBittorrent", {
         }
       }
     }
+    else if (notification === "QB_ACTION_FAILED") {
+      if (this.view.cancel(payload.hashes)) this.redraw();
+    }
     else if (notification === "QB_WARN") {
       this.sslWarning = payload.message;
       this.refresh();
@@ -120,6 +124,11 @@ Module.register("MMM-QBittorrent", {
   refresh() {
     if (this.glance) this.glance.update(this.glanceStatus());
     else this.updateDom();
+  },
+
+  redraw() {
+    if (this.glance) this.glance.update(this.glanceStatus());
+    else this.incrementalUpdate();
   },
 
   glanceStatus() {
