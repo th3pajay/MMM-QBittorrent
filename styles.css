@@ -550,11 +550,17 @@
 .qb-g .qg-conn i { width: 14px; height: 14px; border-radius: 50%; background: var(--qg-downloading); }
 .qb-g .qg-conn[data-state="firewalled"] i { background: var(--qg-paused); }
 .qb-g .qg-conn[data-state="disconnected"] i { background: var(--qg-error); }
-.qb-g .qg-dl { font-size: 84px; font-weight: 700; line-height: 1; margin: 8px 0 2px; color: var(--qg-downloading); }
-.qb-g .qg-ul { font-size: 34px; font-weight: 700; margin-bottom: 14px; color: var(--qg-seeding); }
-.qb-g .qg-arrow { margin-right: 8px; font: 400 0.55em sans-serif; vertical-align: 0.2em; }
-.qb-g .qg-dl small { font-size: 32px; margin-left: 6px; color: var(--qg-dim); }
-.qb-g .qg-ul small { font-size: 24px; margin-left: 6px; color: var(--qg-dim); }
+.qb-g .qg-dl, .qb-g .qg-ul { display: flex; align-items: flex-end; font-weight: 700; font-variant-numeric: tabular-nums; }
+.qb-g .qg-dl { font-size: 84px; line-height: 1; margin: 8px 0 2px; color: var(--qg-downloading); }
+.qb-g .qg-ul { font-size: 34px; margin-bottom: 14px; color: var(--qg-seeding); }
+.qb-g .qg-arrow { align-self: center; margin-right: 8px; font: 400 0.55em sans-serif; }
+.qb-g .qg-dl small { font-size: 32px; margin: 0 0 14px 6px; color: var(--qg-dim); }
+.qb-g .qg-ul small { font-size: 24px; margin: 0 0 5px 6px; color: var(--qg-dim); }
+.qb-g .qg-num { display: inline-flex; }
+.qb-g .qg-reel { display: block; width: 0.6em; height: 1.1em; overflow: hidden; }
+.qb-g .qg-reel.qg-rolling { -webkit-mask-image: linear-gradient(transparent, #000 12%, #000 88%, transparent); mask-image: linear-gradient(transparent, #000 12%, #000 88%, transparent); }
+.qb-g .qg-strip { display: block; white-space: pre; line-height: 1.1; text-align: center; }
+.qb-g .qg-dot { display: block; width: 0.3em; height: 1.1em; line-height: 1.1; text-align: center; }
 .qb-g .qg-counts { display: flex; flex-wrap: wrap; gap: 18px; font-size: 22px; color: var(--qg-dim); }
 .qb-g .qg-counts b { color: var(--c); font-weight: 700; }
 .qb-g.qg-off .qg-dl, .qb-g.qg-off .qg-ul, .qb-g.qg-off .qg-counts { display: none; }
@@ -589,6 +595,7 @@
 .qb-g.qg-compact .qg-rows { gap: 8px; }
 .qb-g.qg-compact .qg-hero { margin-bottom: 10px; }
 .qb-g.qg-compact .qg-dl { font-size: 64px; }
+.qb-g.qg-compact .qg-dl small { margin-bottom: 10px; }
 .qb-g.qg-compact .qg-ul { margin-bottom: 8px; font-size: 28px; }
 .qb-g.qg-compact .qg-name, .qb-g.qg-compact .qg-pct { font-size: 22px; }
 .qb-g.qg-compact .qg-btn { width: 42px; height: 42px; font-size: 18px; }
