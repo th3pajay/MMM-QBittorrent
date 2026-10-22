@@ -1,0 +1,349 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Speed Roll</title>
+<style>
+:root {
+  --qg-downloading: rgb(80, 210, 115);
+  --qg-seeding: rgb(50, 170, 255);
+  --qg-dim: rgba(255, 255, 255, 0.48);
+  --text: rgba(255, 255, 255, 0.92);
+  --glass: rgba(255, 255, 255, 0.05);
+  --border: rgba(255, 255, 255, 0.16);
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  min-height: 100vh;
+  background: #000;
+  color: var(--text);
+  font-family: "Roboto Condensed", system-ui, sans-serif;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 24px;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 32px 16px;
+}
+.card {
+  width: 420px;
+  max-width: 100%;
+  padding: 18px 22px 20px;
+  background: var(--glass);
+  border: 1px solid var(--border);
+  border-radius: 13px;
+  box-shadow: 0 6px 32px rgba(0, 0, 0, 0.45);
+}
+.title { font-size: 14px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--dim, rgba(255,255,255,.48)); }
+.qg-dl, .qg-ul { display: flex; align-items: flex-end; font-weight: 700; font-variant-numeric: tabular-nums; }
+.qg-dl { font-size: 84px; line-height: 1; margin: 8px 0 2px; color: var(--qg-downloading); }
+.qg-ul { font-size: 34px; margin-bottom: 4px; color: var(--qg-seeding); }
+.qg-arrow { margin-right: 8px; font: 400 0.55em sans-serif; align-self: center; }
+.qg-dl small { font-size: 32px; margin-left: 6px; margin-bottom: 14px; color: var(--qg-dim); }
+.qg-ul small { font-size: 24px; margin-left: 6px; margin-bottom: 5px; color: var(--qg-dim); }
+.num { display: inline-flex; }
+.reel {
+  display: inline-block;
+  width: 0.6em;
+  height: 1.1em;
+  overflow: hidden;
+  -webkit-mask-image: linear-gradient(transparent, #000 12%, #000 88%, transparent);
+  mask-image: linear-gradient(transparent, #000 12%, #000 88%, transparent);
+}
+.strip { display: block; will-change: transform; }
+.strip i { display: block; height: 1.1em; line-height: 1.1em; text-align: center; font-style: normal; }
+.dot { display: inline-block; width: 0.3em; height: 1.1em; line-height: 1.1em; text-align: center; }
+.panel { display: grid; gap: 14px; font-size: 14px; }
+.panel h2 { margin: 0; font-size: 14px; letter-spacing: 0.08em; text-transform: uppercase; color: rgba(255,255,255,.48); }
+.row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+label { display: flex; gap: 8px; align-items: center; }
+input[type=number] { width: 90px; }
+input, button { font: inherit; }
+button, input[type=number] {
+  background: rgba(255,255,255,.08);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 5px 10px;
+}
+button { cursor: pointer; }
+button:hover { background: rgba(255,255,255,.16); }
+.log { font: 12px/1.5 ui-monospace, Consolas, monospace; color: rgba(255,255,255,.6); height: 150px; overflow: auto; border: 1px solid var(--border); border-radius: 6px; padding: 8px; }
+.log b { color: var(--text); font-weight: 600; }
+</style>
+</head>
+<body>
+<div class="card">
+  <div class="title">QBittorrent</div>
+  <div class="qg-dl" id="dl"><b class="qg-arrow">↓</b><span class="num"></span><small></small></div>
+  <div class="qg-ul" id="ul"><b class="qg-arrow">↑</b><span class="num"></span><small></small></div>
+</div>
+
+<div class="card panel">
+  <h2>Simulator</h2>
+  <div class="row">
+    <label>DL KB/s <input type="number" id="dlIn" value="20" min="0" step="any"></label>
+    <label>UL KB/s <input type="number" id="ulIn" value="6" min="0" step="any"></label>
+    <button id="apply">Apply</button>
+  </div>
+  <div class="row" id="presets"></div>
+  <div class="row">
+    <label><input type="checkbox" id="auto"> Auto random updates every</label>
+    <input type="number" id="every" value="3" min="1" max="30"> s
+  </div>
+  <label>Slowest roll <input type="range" id="maxDur" min="500" max="3000" value="1200"> <span id="maxDurV"></span></label>
+  <label>Fastest roll <input type="range" id="minDur" min="120" max="800" value="350"> <span id="minDurV"></span></label>
+  <label><input type="checkbox" id="reduce"> Reduced motion (instant swap)</label>
+  <div class="log" id="log"></div>
+</div>
+
+<script>
+const LH = 1.1
+const MB_AT_KB = 1000
+const R_MAX = 16
+const MAX_SPINS = 2
+const JITTER = 0.25
+const EASE = "cubic-bezier(0.22, 0.9, 0.28, 1)"
+
+const opts = {
+  maxDur: 1200,
+  minDur: 350,
+  reduced: matchMedia("(prefers-reduced-motion: reduce)").matches
+}
+
+function speedParts(bytes) {
+  const kb = bytes / 1024
+  if (kb < MB_AT_KB) return [kb.toFixed(1), "KB/s"]
+  return [(kb / 1024).toFixed(1), "MB/s"]
+}
+
+function cell(d) {
+  const c = document.createElement("i")
+  c.textContent = d
+  return c
+}
+
+class Reel {
+  constructor(digit) {
+    this.el = document.createElement("span")
+    this.el.className = "reel"
+    this.strip = document.createElement("span")
+    this.strip.className = "strip"
+    this.el.append(this.strip)
+    this.cells = [digit]
+    this.anim = null
+    this.render()
+  }
+
+  render() {
+    this.strip.replaceChildren(...this.cells.map(cell))
+  }
+
+  position() {
+    if (!this.anim) return 0
+    const m = new DOMMatrix(getComputedStyle(this.strip).transform)
+    return -m.m42 / this.el.clientHeight
+  }
+
+  settle(digit) {
+    if (this.anim) this.anim.cancel()
+    this.anim = null
+    this.cells = [digit]
+    this.render()
+  }
+
+  roll(target, { dur, delay, spins, dir }) {
+    let p = 0
+    if (this.anim) {
+      p = this.position()
+      this.anim.cancel()
+      this.anim = null
+    }
+    const fl = Math.max(0, Math.min(Math.floor(p), this.cells.length - 1))
+    const hasWin = p - fl > 0.001 && fl + 1 < this.cells.length
+    const f = hasWin ? p - fl : 0
+    const win = hasWin ? [this.cells[fl], this.cells[fl + 1]] : [this.cells[Math.min(Math.round(p), this.cells.length - 1)]]
+    const mod = n => ((n % 10) + 10) % 10
+    let cells, from, to
+    if (dir > 0) {
+      const anchor = win[win.length - 1]
+      const m = mod(target - anchor) + 10 * spins
+      cells = [...win]
+      for (let k = 1; k <= m; k++) cells.push(mod(anchor + k))
+      from = f
+      to = cells.length - 1
+    } else {
+      const anchor = win[0]
+      const n = mod(anchor - target) + 10 * spins
+      cells = []
+      for (let k = n; k >= 1; k--) cells.push(mod(anchor - k))
+      cells.push(...win)
+      from = n + f
+      to = 0
+    }
+    if (cells.length === 1 || from === to) return this.settle(target)
+    this.cells = cells
+    this.render()
+    const anim = this.strip.animate(
+      [{ transform: `translateY(${-from * LH}em)` }, { transform: `translateY(${-to * LH}em)` }],
+      { duration: dur, delay, easing: EASE, fill: "both" }
+    )
+    this.anim = anim
+    anim.onfinish = () => {
+      if (this.anim === anim) this.settle(target)
+    }
+  }
+}
+
+class Roller {
+  constructor(root) {
+    this.num = root.querySelector(".num")
+    this.unitEl = root.querySelector("small")
+    this.items = []
+    this.numStr = ""
+    this.unit = ""
+    this.bytes = 0
+  }
+
+  set(bytes, name) {
+    const [numStr, unit] = speedParts(bytes)
+    const first = this.numStr === ""
+    if (numStr === this.numStr && unit === this.unit) {
+      this.bytes = bytes
+      return
+    }
+    const r = Math.abs(bytes - this.bytes) / Math.max(this.bytes, 1024)
+    const norm = Math.min(1, Math.log1p(r) / Math.log1p(R_MAX))
+    const dur = opts.maxDur + (opts.minDur - opts.maxDur) * norm
+    const spins = Math.round(norm * MAX_SPINS)
+    const dir = bytes >= this.bytes ? 1 : -1
+    const offset = Math.random() * 150
+    const instant = first || opts.reduced
+    const chars = [...numStr]
+    const old = this.items
+    const next = []
+    for (let i = 0; i < Math.max(old.length, chars.length); i++) {
+      const o = old[old.length - 1 - i]
+      const c = chars[chars.length - 1 - i]
+      if (c === undefined) {
+        o.el.remove()
+        continue
+      }
+      let item
+      if (c === ".") {
+        item = o && o.dot ? o : { dot: true, el: Object.assign(document.createElement("span"), { className: "dot", textContent: "." }) }
+        if (o && o !== item) o.el.remove()
+      } else {
+        const d = +c
+        const reel = o && !o.dot ? o.reel : new Reel(instant ? d : 0)
+        if (o && o.dot) o.el.remove()
+        item = { reel, el: reel.el }
+        if (instant) reel.settle(d)
+        else {
+          const jitter = 1 + (Math.random() * 2 - 1) * JITTER
+          reel.roll(d, { dur: dur * jitter * (1 + 0.05 * i), delay: offset + Math.random() * 100 + i * 20, spins, dir })
+        }
+      }
+      next.unshift(item)
+    }
+    next.forEach((item, idx) => {
+      if (this.num.childNodes[idx] !== item.el) this.num.insertBefore(item.el, this.num.childNodes[idx] || null)
+    })
+    this.items = next
+    if (unit !== this.unit) {
+      this.unitEl.textContent = unit
+      if (!instant) this.unitEl.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 350, easing: "ease-out" })
+    }
+    if (!first) log(name, this.numStr, this.unit, numStr, unit, r, dur, spins, instant)
+    this.numStr = numStr
+    this.unit = unit
+    this.bytes = bytes
+  }
+}
+
+const dl = new Roller(document.getElementById("dl"))
+const ul = new Roller(document.getElementById("ul"))
+const logEl = document.getElementById("log")
+
+function log(name, fromN, fromU, toN, toU, r, dur, spins, instant) {
+  const line = document.createElement("div")
+  line.innerHTML = `<b>${name}</b> ${fromN} ${fromU} → ${toN} ${toU} · ratio ${r.toFixed(2)} · ` +
+    (instant ? "instant" : `${Math.round(dur)}ms · ${spins} spin${spins === 1 ? "" : "s"}`)
+  logEl.prepend(line)
+  while (logEl.children.length > 40) logEl.lastChild.remove()
+}
+
+function push(dlKb, ulKb) {
+  dl.set(dlKb * 1024, "DL")
+  ul.set(ulKb * 1024, "UL")
+  dlIn.value = +dlKb.toFixed(1)
+  ulIn.value = +ulKb.toFixed(1)
+}
+
+const dlIn = document.getElementById("dlIn")
+const ulIn = document.getElementById("ulIn")
+document.getElementById("apply").onclick = () => push(+dlIn.value || 0, +ulIn.value || 0)
+for (const el of [dlIn, ulIn]) el.onkeydown = e => { if (e.key === "Enter") push(+dlIn.value || 0, +ulIn.value || 0) }
+
+const PRESETS = [
+  ["20 → 25 KB/s", 20, 25],
+  ["20 → 345 KB/s", 20, 345],
+  ["345 → 20 KB/s", 345, 20],
+  ["0.9 → 1.2 MB/s", 921.6, 1228.8],
+  ["980 KB/s → 1.4 MB/s", 980, 1433.6],
+  ["1.4 MB/s → 980 KB/s", 1433.6, 980],
+  ["99.9 → 100.4 KB/s", 99.9, 100.4],
+  ["0 → 12 MB/s", 0, 12288]
+]
+const presets = document.getElementById("presets")
+for (const [label, from, to] of PRESETS) {
+  const b = document.createElement("button")
+  b.textContent = label
+  b.onclick = () => {
+    const prev = opts.reduced
+    opts.reduced = true
+    push(from, from / 6)
+    opts.reduced = prev
+    setTimeout(() => push(to, to / 6), 250)
+  }
+  presets.append(b)
+}
+
+let timer = null
+function schedule() {
+  clearInterval(timer)
+  timer = null
+  if (!auto.checked) return
+  timer = setInterval(() => {
+    const f = Math.exp(Math.random() * 4 - 1.5)
+    const nextDl = Math.min(30000, Math.max(0, +dlIn.value * f + (Math.random() < 0.1 ? 40 : 0)))
+    const nextUl = Math.min(8000, Math.max(0, +ulIn.value * Math.exp(Math.random() * 3 - 1.2)))
+    push(nextDl, nextUl)
+  }, (+every.value || 3) * 1000)
+}
+const auto = document.getElementById("auto")
+const every = document.getElementById("every")
+auto.onchange = schedule
+every.onchange = schedule
+
+const maxDur = document.getElementById("maxDur")
+const minDur = document.getElementById("minDur")
+function syncDurs() {
+  opts.maxDur = Math.max(+maxDur.value, +minDur.value)
+  opts.minDur = Math.min(+maxDur.value, +minDur.value)
+  document.getElementById("maxDurV").textContent = `${maxDur.value}ms`
+  document.getElementById("minDurV").textContent = `${minDur.value}ms`
+}
+maxDur.oninput = minDur.oninput = syncDurs
+syncDurs()
+
+const reduce = document.getElementById("reduce")
+reduce.checked = opts.reduced
+reduce.onchange = () => { opts.reduced = reduce.checked }
+
+push(20, 6)
+</script>
+</body>
+</html>
