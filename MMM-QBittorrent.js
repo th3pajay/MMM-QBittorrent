@@ -1,8 +1,14 @@
+const MMMQB_PHASES = {
+  connecting: { step: 1, message: "Connecting to qBittorrent..." },
+  "signing-in": { step: 2, message: "Signing in..." },
+  syncing: { step: 3, message: "Syncing torrents..." }
+};
+
 Module.register("MMM-QBittorrent", {
   defaults: {},
 
   start() {
-    const missing = ["Config", "TorrentState", "Format", "TorrentView", "Motion", "Columns", "Glance"].filter(n => !window[`MMMQB${n}`]);
+    const missing = ["Config", "TorrentState", "Format", "TorrentRow", "TorrentView", "Motion", "Columns", "Glance", "Table"].filter(n => !window[`MMMQB${n}`]);
     if (missing.length > 0) {
       this.startError = `Failed to load: ${missing.join(", ")}`;
       console.error("[MMM-QBittorrent]", this.startError);
@@ -14,6 +20,9 @@ Module.register("MMM-QBittorrent", {
     this.initializing = true;
     this.errorMessage = null;
     this.errorDetails = null;
+    this.phase = "connecting";
+    this.retries = 0;
+    this.stale = false;
 
     this.authTimestamp = null;
 
@@ -22,11 +31,14 @@ Module.register("MMM-QBittorrent", {
     normalized.warnings.forEach(w => console.warn("[MMM-QBittorrent]", w));
     this.normalizedConfig = normalized.display;
     this.motion = MMMQBMotion.create();
-    this.glance = this.normalizedConfig.layout === "glance"
-      ? MMMQBGlance.create({ config: this.normalizedConfig, motion: this.motion, view: this.view, locale: this.config.language || navigator.language })
-      : null;
-    this.prevHashes = null;
-    this.prevAggregateSpeed = null;
+    const layout = this.normalizedConfig.layout === "glance" ? MMMQBGlance : MMMQBTable;
+    this.layout = layout.create({
+      config: this.normalizedConfig,
+      motion: this.motion,
+      view: this.view,
+      locale: this.config.language || navigator.language,
+      position: this.data?.position || ""
+    });
     this.sslWarning = null;
 
     this.boundClickHandler = (e) => {
@@ -38,7 +50,7 @@ Module.register("MMM-QBittorrent", {
       const hash = btn.dataset.hash;
       const action = btn.dataset.action;
       this.sendSocketNotification("QB_ACTION", { hash, action });
-      if (this.view.expect(hash, action)) this.redraw();
+      if (this.view.expect(hash, action)) this.render();
     };
 
     this.isListenerAttached = true;
@@ -49,7 +61,7 @@ Module.register("MMM-QBittorrent", {
   },
 
   getScripts() {
-    return ["config", "torrent-state", "format", "torrent-view", "motion", "columns", "glance"].map(name => this.file(`lib/${name}.js`));
+    return ["config", "torrent-state", "format", "torrent-row", "torrent-view", "motion", "columns", "glance", "table"].map(name => this.file(`lib/${name}.js`));
   },
 
   getStyles() {
@@ -63,7 +75,7 @@ Module.register("MMM-QBittorrent", {
       this.boundClickHandler = null;
     }
     if (this.motion) this.motion.dispose();
-    if (this.glance) this.glance.stop();
+    if (this.layout) this.layout.stop();
   },
 
   suspend() {
@@ -89,60 +101,69 @@ Module.register("MMM-QBittorrent", {
     if (notification === "QB_UPDATE") {
       const { torrents: torrentList, transferInfo } = payload;
       this.initializing = false;
+      this.stale = false;
+      this.retries = 0;
       this.authTimestamp = Date.now();
 
-      const { dataChanged, structureChanged, hashes } = this.view.ingest(torrentList, transferInfo);
+      this.view.ingest(torrentList, transferInfo);
       this.motion.prune(h => this.view.has(h));
       this.loaded = true;
-
-      if (this.glance) {
-        this.glance.update(this.glanceStatus());
-      } else if (dataChanged) {
-        if (structureChanged) {
-          this.animateStructureChange(hashes);
-        } else {
-          this.incrementalUpdate();
-        }
-      }
+      this.render();
     }
     else if (notification === "QB_ACTION_FAILED") {
-      if (this.view.cancel(payload.hashes)) this.redraw();
+      if (this.view.cancel(payload.hashes)) this.render();
     }
     else if (notification === "QB_WARN") {
       this.sslWarning = payload.message;
-      this.refresh();
+      this.render();
+    }
+    else if (notification === "QB_PHASE") {
+      if (this.loaded || !MMMQB_PHASES[payload.phase]) return;
+      this.phase = payload.phase;
+      this.render();
     }
     else if (notification === "QB_ERROR") {
-      this.initializing = false;
-      this.loaded = false;
-      this.errorMessage = payload.message || "Connection failed";
-      this.errorDetails = payload.failures ? `(${payload.failures} consecutive failures)` : "";
-      this.refresh();
+      if (payload.willRetry) {
+        this.stale = this.loaded;
+        this.retries = payload.failures;
+      } else {
+        this.initializing = false;
+        this.loaded = false;
+        this.stale = false;
+        this.errorMessage = payload.message || "Connection failed";
+        this.errorDetails = payload.failures ? `(${payload.failures} consecutive failures)` : "";
+      }
+      this.render();
     }
   },
 
-  refresh() {
-    if (this.glance) this.glance.update(this.glanceStatus());
-    else this.updateDom();
-  },
-
-  redraw() {
-    if (this.glance) this.glance.update(this.glanceStatus());
-    else this.incrementalUpdate();
-  },
-
-  glanceStatus() {
+  status() {
     const ssl = Boolean(this.sslWarning);
-    if (this.initializing) return { state: "connecting", message: "Connecting to qBittorrent...", ssl };
+    if (this.initializing) {
+      const { step, message } = MMMQB_PHASES[this.phase];
+      const details = `Step ${step} of 3`;
+      return { state: "connecting", message, details: this.retries ? `Retry ${this.retries} · ${details}` : details, ssl };
+    }
     if (!this.loaded) return { state: "error", message: this.errorMessage || "qBittorrent offline", details: this.errorDetails, ssl };
+    if (this.stale) return { state: "ok", stale: true, message: "Reconnecting...", ssl };
     return { state: "ok", ssl };
+  },
+
+  render() {
+    if (!this.layout) return;
+    try {
+      this.layout.update(this.status());
+    } catch (error) {
+      console.error("[MMM-QBittorrent] Error rendering layout:", error);
+      this.layout.update({ state: "error", message: `Module Error: ${error.message}`, details: "Check browser console for details", ssl: false });
+    }
   },
 
   /** @returns {HTMLElement} */
   getDom() {
     const wrapper = document.createElement("div");
 
-    if (this.startError || !this.normalizedConfig) {
+    if (this.startError || !this.layout) {
       wrapper.className = "mmm-qb";
       const msg = document.createElement("div");
       msg.className = "dimmed small qb-status-message";
@@ -152,263 +173,11 @@ Module.register("MMM-QBittorrent", {
       return wrapper;
     }
 
-    try {
-      const config = this.normalizedConfig;
-
-      wrapper.className = `mmm-qb${config.compact ? " compact" : ""}${config.colors.rowTint ? " qb-tint" : ""}`;
-      wrapper.dataset.moduleId = this.moduleId;
-      wrapper.style.transform = `scale(${config.scale})`;
-
-      const position = this.data?.position || '';
-      if (position && position.includes("bottom")) {
-        wrapper.style.transformOrigin = "bottom left";
-      } else {
-        wrapper.style.transformOrigin = "top left";
-      }
-
-      if (this.glance) {
-        wrapper.className = "qb-gw";
-        this.glance.el.dataset.align = config.headerAlign || (position.includes("right") ? "right" : position.includes("center") ? "center" : "left");
-        wrapper.appendChild(this.glance.el);
-        this.glance.update(this.glanceStatus());
-        return wrapper;
-      }
-
-      const header = this.renderModuleHeader(config);
-      wrapper.appendChild(header);
-
-      if (this.initializing) {
-        const msg = document.createElement("div");
-        msg.className = "dimmed small qb-status-message";
-        msg.textContent = "Connecting to qBittorrent...";
-        wrapper.appendChild(msg);
-        return wrapper;
-      }
-
-      if (!this.loaded) {
-        const msg = document.createElement("div");
-        msg.className = "dimmed small qb-status-message";
-        msg.textContent = this.errorMessage || "qBittorrent offline";
-        wrapper.appendChild(msg);
-
-        if (this.errorDetails) {
-          const details = document.createElement("div");
-          details.className = "dimmed xsmall qb-status-details";
-          details.textContent = this.errorDetails;
-          wrapper.appendChild(details);
-        }
-        return wrapper;
-      }
-
-      const displayTorrents = this.getDisplayTorrents(config);
-
-      if (displayTorrents.length > 0) {
-        const table = this.renderTable(displayTorrents, config);
-        wrapper.appendChild(table);
-      } else {
-        const msg = document.createElement("div");
-        msg.className = "dimmed small qb-status-message";
-        msg.textContent = "No torrents to display";
-        wrapper.appendChild(msg);
-      }
-
-      this.prevHashes = new Set(displayTorrents.map(t => t.hash));
-
-    } catch (error) {
-      console.error("[MMM-QBittorrent] Error in getDom():", error);
-      wrapper.className = "mmm-qb";
-
-      const errorHeader = document.createElement("div");
-      errorHeader.className = "qb-module-header";
-      errorHeader.textContent = "QBittorrent";
-      wrapper.appendChild(errorHeader);
-
-      const separator = document.createElement("hr");
-      separator.className = "qb-header-separator";
-      wrapper.appendChild(separator);
-
-      const errorMsg = document.createElement("div");
-      errorMsg.className = "dimmed small qb-status-message";
-      errorMsg.style.color = "#ff6b6b";
-      errorMsg.textContent = `Module Error: ${error.message}`;
-      wrapper.appendChild(errorMsg);
-
-      const errorDetails = document.createElement("div");
-      errorDetails.className = "dimmed xsmall qb-status-details";
-      errorDetails.textContent = "Check browser console for details";
-      wrapper.appendChild(errorDetails);
-    }
-
+    wrapper.dataset.moduleId = this.moduleId;
+    wrapper.style.transform = `scale(${this.normalizedConfig.scale})`;
+    wrapper.style.transformOrigin = (this.data?.position || "").includes("bottom") ? "bottom left" : "top left";
+    wrapper.appendChild(this.layout.el);
+    this.render();
     return wrapper;
-  },
-
-  /** @param {NormalizedConfig} config @returns {TorrentData[]} */
-  getDisplayTorrents(config) {
-    return this.view.select(config);
-  },
-
-  incrementalUpdate() {
-    const wrapper = document.querySelector(`.mmm-qb[data-module-id="${this.moduleId}"]`);
-    if (!wrapper) {
-      this.updateDom();
-      return;
-    }
-
-    const speedSpan = wrapper.querySelector('.qb-header-speed');
-    if (speedSpan) {
-      const aggregate = this.view.aggregateSpeed();
-      if (this.prevAggregateSpeed !== null && aggregate !== this.prevAggregateSpeed && aggregate) {
-        this.motion.flashTick(speedSpan, `${this.moduleId}:header`);
-      }
-      this.prevAggregateSpeed = aggregate;
-      speedSpan.textContent = aggregate;
-    }
-
-    const config = this.normalizedConfig;
-    if (config.headerDetails.show) {
-      const stats = this.view.headerStats(config.headerDetails.components);
-      for (const { key, value } of stats) {
-        const el = wrapper.querySelector(`.qb-stat-value[data-stat="${key}"]`);
-        if (el) el.textContent = value;
-      }
-    }
-
-    const displayTorrents = this.getDisplayTorrents(config);
-
-    for (const torrent of displayTorrents) {
-      const row = wrapper.querySelector(`tr[data-hash="${CSS.escape(torrent.hash)}"]`);
-      if (!row) {
-        this.updateDom();
-        return;
-      }
-      MMMQBColumns.patchRow(row, torrent, this.cellContext(config));
-    }
-  },
-
-  /** @param {NormalizedConfig} config */
-  cellContext(config) {
-    return { config, motion: this.motion, locale: this.config.language || navigator.language };
-  },
-
-  /** @param {Set<string>} currentHashes */
-  animateStructureChange(currentHashes) {
-    const wrapper = document.querySelector(`.mmm-qb[data-module-id="${this.moduleId}"]`);
-    if (!wrapper || this.motion.reduced()) {
-      this.updateDom();
-      return;
-    }
-    const leaving = [...wrapper.querySelectorAll('tr[data-hash]')]
-      .filter(r => !currentHashes.has(r.dataset.hash));
-    if (leaving.length === 0) {
-      this.updateDom();
-      return;
-    }
-    leaving.forEach(r => r.classList.add('qb-row-leave'));
-    setTimeout(() => this.updateDom(), MMMQBConfig.CONSTANTS.LEAVE_ANIM_MS);
-  },
-
-  /** @param {NormalizedConfig} config @returns {HTMLElement} */
-  renderModuleHeader(config) {
-    const headerContainer = document.createElement("div");
-    headerContainer.className = "qb-header-container";
-
-    let align = config.headerAlign;
-    if (!align) {
-      const position = this.data?.position || '';
-      if (position.includes('left')) align = 'left';
-      else if (position.includes('center')) align = 'center';
-      else if (position.includes('right')) align = 'right';
-      else align = 'left';
-    }
-
-    headerContainer.style.textAlign = align;
-
-    const titleRow = document.createElement("div");
-    titleRow.className = "qb-header-title-row";
-
-    const headerText = document.createElement("div");
-    headerText.className = "qb-module-header";
-    headerText.textContent = "QBittorrent";
-
-    const speedSpan = document.createElement("span");
-    speedSpan.className = "qb-header-speed";
-    speedSpan.textContent = this.view.aggregateSpeed();
-
-    titleRow.appendChild(headerText);
-    titleRow.appendChild(speedSpan);
-    headerContainer.appendChild(titleRow);
-
-    const separator = document.createElement("hr");
-    separator.className = "qb-header-separator";
-
-    if (this.sslWarning) {
-      const warning = document.createElement("span");
-      warning.className = "qb-ssl-warning";
-      warning.textContent = "⚠ SSL off";
-      warning.title = this.sslWarning;
-      headerContainer.appendChild(warning);
-    }
-
-    headerContainer.appendChild(separator);
-
-    if (config.headerDetails.show) {
-      const details = this.renderHeaderDetails(config);
-      if (details) headerContainer.appendChild(details);
-    }
-
-    return headerContainer;
-  },
-
-  /** @param {NormalizedConfig} config @returns {HTMLElement|null} */
-  renderHeaderDetails(config) {
-    const stats = this.view.headerStats(config.headerDetails.components);
-    if (stats.length === 0) return null;
-
-    const grid = document.createElement("div");
-    grid.className = "qb-header-details";
-
-    for (const { key, label, value } of stats) {
-      const cell = document.createElement("div");
-      cell.className = "qb-header-stat";
-      cell.dataset.stat = key;
-
-      const lbl = document.createElement("span");
-      lbl.className = "qb-stat-label";
-      lbl.textContent = label;
-
-      const val = document.createElement("span");
-      val.className = "qb-stat-value";
-      val.dataset.stat = key;
-      val.textContent = value;
-
-      cell.appendChild(lbl);
-      cell.appendChild(val);
-      grid.appendChild(cell);
-    }
-
-    return grid;
-  },
-
-  /** @param {TorrentData[]} torrents @param {NormalizedConfig} config @returns {HTMLElement} */
-  renderTable(torrents, config) {
-    const table = document.createElement("table");
-    table.className = "qb-table";
-
-    const thead = document.createElement("thead");
-    thead.className = "qb-thead";
-    thead.appendChild(MMMQBColumns.createHeaderRow(config.columns));
-    table.appendChild(thead);
-
-    const tbody = document.createElement("tbody");
-    tbody.className = "qb-tbody";
-
-    const ctx = this.cellContext(config);
-    torrents.forEach(torrent => {
-      const enter = Boolean(this.prevHashes) && !this.prevHashes.has(torrent.hash);
-      tbody.appendChild(MMMQBColumns.createRow(torrent, ctx, { enter }));
-    });
-
-    table.appendChild(tbody);
-    return table;
   }
 });
