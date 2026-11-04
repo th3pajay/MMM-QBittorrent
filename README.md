@@ -4,7 +4,7 @@ A glanceable qBittorrent dashboard for [MagicMirror²](https://magicmirror.build
 
 ![MagicMirror](https://img.shields.io/badge/MagicMirror-v2.33.0-blue)
 ![qBittorrent](https://img.shields.io/badge/qBittorrent-v4%20%7C%20v5-green)
-![Version](https://img.shields.io/badge/Version-1.2.26-yellow)
+![Version](https://img.shields.io/badge/Version-1.2.28-yellow)
 ![License](https://img.shields.io/badge/License-MIT-lightgrey)
 
 <p align="center">
@@ -48,7 +48,7 @@ That's it. No `npm install`, no build step.
 ```javascript
 config: {
   connection: { host: "http://192.168.1.100:8080", username: "user", password: "password" },
-  polling: { updateInterval: 5000, pollTimeout: 2000, maxConsecutiveFailures: 3, pauseOnRepeatedFailures: false },
+  polling: { updateInterval: 5000, pollTimeout: 8000, maxConsecutiveFailures: 3, pauseOnRepeatedFailures: false },
   display: {
     layout: "glance",
     maxItems: 4,

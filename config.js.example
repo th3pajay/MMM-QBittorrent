@@ -60,7 +60,7 @@
 
     polling: {
       updateInterval: 5000,          // ms between polls (min: 1000)
-      pollTimeout: 2000,             // request timeout in ms (min: 500)
+      pollTimeout: 8000,            // request timeout in ms (min: 500)
     },
 
     connection: {
